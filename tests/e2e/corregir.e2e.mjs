@@ -158,7 +158,8 @@ try {
   comprobar(r2.referencia === 'metrónomo', 'con el metrónomo en marcha, el desajuste se mide contra él');
   comprobar((await pagina.$$eval('#partitura .nota-fallada', (els) => els.length)) === 0, 'un intento nuevo borra las marcas del anterior');
 
-  // Fragmento largo (compases 1-16, letra grande): la hoja baja sola mientras tocas
+  // Fragmento largo (compases 1-16, letra grande): en cada compás nuevo, el compás queda SIEMPRE en el mismo
+  // sitio de la hoja y el siguiente ya se ve. Primero en «una línea» (por defecto), luego en «páginas».
   await pagina.click('#mini-metro');
   await pagina.selectOption('#mano', 'ambas');
   for (let i = 0; i < 3; i++) await pagina.click('#zoom-mas');
@@ -166,22 +167,47 @@ try {
   await pagina.dispatchEvent('#frag-desde', 'change');
   await pagina.fill('#frag-hasta', '16');
   await pagina.dispatchEvent('#frag-hasta', 'change');
+  await pagina.exposeFunction('__medida', (m) => medidas.push(m));
+  let medidas = [];
   await pagina.evaluate(() => {
-    const hoja = document.querySelector('#partitura');
-    window.__maxScroll = 0;
-    hoja.addEventListener('scroll', () => { window.__maxScroll = Math.max(window.__maxScroll, hoja.scrollTop); });
+    // Tras cada cambio de compás (y el desplazamiento suave), dónde queda el compás y si se ve el siguiente
+    window.pianobot.partitura.addEventListener('compas', (e) => setTimeout(() => {
+      const p = window.pianobot.partitura;
+      const hoja = document.querySelector('#partitura');
+      const h = hoja.getBoundingClientRect();
+      const r = p.osmd.cursors[0].cursorElement.getBoundingClientRect();
+      const siguientes = [...p.notasPintadas()].filter((g) => g.sourceNote.SourceMeasure.MeasureNumberXML === e.detail.compas + 1)
+        .map((g) => g.getSVGGElement().getBoundingClientRect());
+      const siguienteVisible = !siguientes.length || siguientes.every((x) => x.left >= h.left - 1 && x.right <= h.right + 1 && x.top >= h.top - 1 && x.bottom <= h.bottom + 1);
+      window.__medida({
+        compas: e.detail.compas, izquierda: (r.left - h.left) / h.width, arriba: r.top - h.top,
+        alFinal: hoja.scrollLeft >= hoja.scrollWidth - hoja.clientWidth - 2, alFondo: hoja.scrollTop >= hoja.scrollHeight - hoja.clientHeight - 2,
+        siguienteVisible, ultimo: !siguientes.length,
+      });
+    }, 450));
   });
-  const altura = await pagina.evaluate(() => ({ hoja: document.querySelector('#partitura').clientHeight, total: document.querySelector('#partitura').scrollHeight }));
-  await pagina.evaluate((ev) => window.__tocar(ev), interpretacion({ desde: 1, hasta: 16, ppm: 240 }));
-  const bajada = await pagina.evaluate(() => window.__maxScroll);
-  comprobar(altura.total > altura.hoja && bajada > 100, `con 16 compases la hoja baja sola (contenido ${altura.total}px en ${altura.hoja}px, bajó ${Math.round(bajada)}px)`);
-  const lineaAbajo = await pagina.evaluate(() => {
-    const hoja = document.querySelector('#partitura');
-    const el = window.pianobot.partitura.osmd.cursors[1].cursorElement;
-    return el.offsetTop >= hoja.scrollTop && el.offsetTop + el.offsetHeight <= hoja.scrollTop + hoja.clientHeight + 1;
-  });
-  comprobar(lineaAbajo, 'la línea roja queda a la vista al llegar al último sistema');
-  if (capturas) await pagina.screenshot({ path: join(capturas, 'seguimiento.png') });
+  for (const vista of ['linea', 'paginas']) {
+    if (vista === 'paginas') await pagina.click('#vista');
+    comprobar((await pagina.textContent('#vista')).includes(vista === 'linea' ? 'Una línea' : 'Páginas'), `vista «${vista}»`);
+    medidas = [];
+    await pagina.evaluate((ev) => window.__tocar(ev), interpretacion({ desde: 1, hasta: 16, ppm: 120 }));
+    await pagina.waitForTimeout(600);
+    const durante = medidas.filter((m) => m.compas > 1 && m.compas < 16);
+    if (vista === 'linea') {
+      const fijos = durante.filter((m) => m.alFinal || (m.izquierda > 0 && m.izquierda < 0.12));
+      comprobar(durante.length >= 12 && fijos.length === durante.length,
+        `una línea: cada compás nuevo queda a la izquierda (${fijos.length} de ${durante.length}; posiciones ${durante.map((m) => m.izquierda.toFixed(2)).join(' ')})`);
+    } else {
+      // (arriba: deja sitio para lo que sobresale del pentagrama, como plicas o números de compás)
+      const fijos = durante.filter((m) => m.alFondo || (m.arriba >= 0 && m.arriba < 60));
+      comprobar(durante.length >= 12 && fijos.length === durante.length,
+        `páginas: la línea del compás nuevo queda arriba (${fijos.length} de ${durante.length}; ${durante.map((m) => Math.round(m.arriba)).join(' ')})`);
+    }
+    const conSiguiente = durante.filter((m) => m.siguienteVisible);
+    comprobar(conSiguiente.length === durante.length, `${vista}: el compás siguiente ya se ve (${conSiguiente.length} de ${durante.length})`);
+    if (capturas) await pagina.screenshot({ path: join(capturas, `seguimiento-${vista}.png`) });
+    await pagina.waitForFunction(() => /Corregido/.test(document.querySelector('#partitura-estado').textContent), null, { timeout: 8000 });
+  }
 
   await pagina.click('#corregir');
   comprobar((await pagina.getAttribute('#corregir', 'aria-pressed')) === 'false', 'se desactiva');
@@ -195,7 +221,7 @@ try {
     await ctx.addInitScript(pianoFalso);
     await ctx.addInitScript(([url, token]) => {
       localStorage.setItem('pianobot.conexion', JSON.stringify({ url, token }));
-      localStorage.setItem('pianobot.ajustes', JSON.stringify({ zoom: 1.45, fragmentos: { prueba: { desde: 1, hasta: 16 } } }));
+      localStorage.setItem('pianobot.ajustes', JSON.stringify({ zoom: 1.45, vista: 'paginas', fragmentos: { prueba: { desde: 1, hasta: 16 } } }));
     }, [APPS_SCRIPT, TOKEN]);
     const pag = await ctx.newPage();
     pag.on('pageerror', (e) => fallos.push(`error en la página: ${e.message}`));

@@ -29,6 +29,7 @@ const ajustes = {
   retrasoMs: 0,
   pieza: null, // id de la pieza (pestaña «Piezas» del Sheet); null = la primera
   fragmentos: {}, // id de la pieza → {desde, hasta}: cada pieza recuerda su fragmento
+  vista: 'linea', // 'linea' (un solo pentagrama que se desplaza compás a compás) o 'paginas'
   zoom: 1,
 };
 try {
@@ -437,6 +438,22 @@ function dibujar() {
 // ---------- Partitura ----------
 const partitura = new Partitura($('partitura'));
 partitura.zoom = ajustes.zoom;
+partitura.unaLinea = ajustes.vista !== 'paginas';
+
+function pintarVista() {
+  $('vista').textContent = partitura.unaLinea ? '➡ Una línea' : '☰ Páginas';
+  $('vista').title = partitura.unaLinea
+    ? 'Ahora: una línea (se desplaza compás a compás). Pulsa para ver en páginas.'
+    : 'Ahora: páginas. Pulsa para ver en una línea que se desplaza compás a compás.';
+}
+pintarVista();
+$('vista').addEventListener('click', () => {
+  partitura.unaLinea = !partitura.unaLinea;
+  ajustes.vista = partitura.unaLinea ? 'linea' : 'paginas';
+  guardar();
+  pintarVista();
+  if (partitura.osmd) verFragmento(partitura.desde, partitura.hasta);
+});
 
 function pintarFragmento() {
   $('frag-desde').value = partitura.desde;
@@ -870,7 +887,8 @@ function seguirIntento() {
     estados.set(clave, x.estado);
   }
   partitura.pintarEstados((gn) => estados.get(claveOsmd(gn.sourceNote)));
-  if (ultimo.compas !== partitura.compas) partitura.irACompas(ultimo.compas, { desplazar: false });
+  // Compás nuevo: se encuadra (la mirada se queda en el mismo sitio); la línea roja, dentro del compás
+  if (ultimo.compas !== partitura.compas) partitura.irACompas(ultimo.compas);
   partitura.seguirA(inicioFragmento() + ultimo.pos);
 }
 
@@ -957,7 +975,7 @@ function bucleAlTempo() {
     }
     if (movida) {
       const c = practica.compases.findLast((x) => x.inicio <= pos);
-      if (c && c.numero !== partitura.compas) partitura.irACompas(c.numero, { desplazar: false });
+      if (c && c.numero !== partitura.compas) partitura.irACompas(c.numero);
       partitura.seguirA(inicioFragmento() + practica.momentos[practica.siguiente - 1]);
       estadoPartitura(`Al tempo · compás ${partitura.compas}`);
     }

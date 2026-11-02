@@ -148,6 +148,7 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 .barra-practica .grupo { display: flex; align-items: center; gap: 6px; }
 .barra-practica .etiqueta { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mini-metro { margin-left: auto; }
+.vista { padding: 0 12px; white-space: nowrap; }
 .mini-boton[aria-pressed='true'] { background: var(--acento); color: var(--acento-tinta); border-color: var(--acento); }
 .estado-partitura { margin: 0; font-size: 0.85rem; min-height: 1.2em; }
 .guardado { font-size: 0.85rem; color: var(--tenue); white-space: nowrap; }

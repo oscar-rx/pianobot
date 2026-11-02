@@ -24,6 +24,9 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   arriba.
 - **Seguimiento en directo:** mientras tocas con «Corregir», una línea roja sigue la nota por la que vas, las notas se
   colorean al momento (verde bien, rojo fallada, naranja saltada) y la hoja baja sola al pasar de sistema.
+- **Vista «una línea» (por defecto) o «páginas»** (botón ➡ / ☰): en «una línea» el fragmento va en un solo pentagrama
+  que se desplaza en horizontal compás a compás, con el compás que tocas siempre a la izquierda y los siguientes a
+  la vista; en «páginas», cada compás nuevo deja su línea arriba y la siguiente asoma debajo antes de llegar.
 - **Controles arriba:** Digitar, Corregir, mano, compás y un metrónomo mínimo (− tempo + ▶) encima de la partitura,
   que tiene su propio scroll; no hace falta bajar la página para llegar a ellos.
 - **Digitación en la tablet:** botón **✍️ Digitar**, tocas una nota y eliges el dedo (1-5, o ✕ para quitarlo); salta

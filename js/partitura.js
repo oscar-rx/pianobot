@@ -1,6 +1,9 @@
 // La partitura en pantalla: pinta un fragmento de la pieza (del compás n al m) con
 // OpenSheetMusicDisplay (OSMD). Dos cursores: uno sombrea el compás en el que vas y otro, una línea roja
-// fina, sigue la nota por la que vas mientras tocas. La hoja tiene su propio scroll y baja sola.
+// fina, sigue la nota por la que vas mientras tocas. La hoja tiene su propio scroll y se mueve compás a compás:
+//  - vista «una línea»: todo el fragmento en un solo pentagrama que se desplaza en horizontal; el compás que
+//    tocas queda siempre a la izquierda y a la derecha se ven los siguientes;
+//  - vista «páginas»: en cada compás nuevo, su línea se coloca arriba y la siguiente queda a la vista debajo.
 // OSMD se carga como script clásico (js/vendor) y queda en window.opensheetmusicdisplay.
 
 export class Partitura extends EventTarget {
@@ -13,6 +16,7 @@ export class Partitura extends EventTarget {
     this.hasta = 4;
     this.compas = 1; // el compás marcado por el cursor
     this.zoom = 1;
+    this.unaLinea = true; // vista «una línea» (true) o «páginas» (false)
   }
 
   get numCompases() {
@@ -53,7 +57,7 @@ export class Partitura extends EventTarget {
     hasta = Math.max(desde, Math.min(n, Math.round(hasta)));
     this.desde = desde;
     this.hasta = hasta;
-    this.osmd.setOptions({ drawFromMeasureNumber: desde, drawUpToMeasureNumber: hasta });
+    this.osmd.setOptions({ drawFromMeasureNumber: desde, drawUpToMeasureNumber: hasta, renderSingleHorizontalStaffline: this.unaLinea });
     this.osmd.zoom = this.zoom;
     this.osmd.render();
     this.irACompas(desde);
@@ -74,7 +78,7 @@ export class Partitura extends EventTarget {
     while (!cursor.iterator.EndReached && cursor.iterator.CurrentMeasureIndex < numero - 1) cursor.next();
     cursor.update();
     this.compas = numero;
-    if (desplazar) this.#aLaVista(cursor.cursorElement);
+    if (desplazar) this.#encuadrarCompas(cursor.cursorElement);
     this.dispatchEvent(new CustomEvent('compas', { detail: { compas: numero } }));
   }
 
@@ -100,7 +104,58 @@ export class Partitura extends EventTarget {
   }
 
   /**
-   * Baja (o sube) la hoja para que se vea el sistema donde está el cursor, con un poco de margen arriba.
+   * Coloca el compás actual (su cursor sombreado) siempre en el mismo sitio, para no mover la mirada:
+   * en «una línea», a la izquierda (con un trocito del anterior); en «páginas», su línea arriba del todo.
+   */
+  #encuadrarCompas(el) {
+    if (!el || el.style.display === 'none') return;
+    const hoja = this.contenedor;
+    const r = el.getBoundingClientRect();
+    const h = hoja.getBoundingClientRect();
+    if (this.unaLinea) {
+      hoja.scrollTo({ left: Math.max(0, hoja.scrollLeft + (r.left - h.left) - 0.06 * hoja.clientWidth) });
+    } else if (hoja.scrollHeight > hoja.clientHeight + 2) {
+      // La línea (sistema) del compás, con todo lo que sobresale del pentagrama, arriba de la hoja
+      const linea = this.#cajaSistema(this.compas) ?? r;
+      const arriba = Math.min(linea.top, r.top);
+      let objetivo = hoja.scrollTop + (arriba - h.top) - 12;
+      // Si el compás siguiente está en la línea de abajo y no cabría, se sube lo justo para que asome
+      // (sin tapar el compás actual): así se ve lo que viene antes de llegar.
+      const siguiente = this.#cajaSistema(this.compas + 1);
+      if (siguiente && siguiente.top > r.bottom) {
+        const fondo = hoja.scrollTop + (siguiente.bottom - h.top) + 12 - hoja.clientHeight;
+        if (fondo > objetivo) objetivo = Math.min(fondo, hoja.scrollTop + (r.top - h.top) - 4);
+      }
+      hoja.scrollTo({ top: Math.max(0, objetivo) });
+    }
+    this.#aLaVista(el);
+  }
+
+  /**
+   * Caja (en pantalla) que ocupan las notas pintadas de la línea (sistema) en la que está un compás,
+   * o null si el compás no está en el fragmento.
+   */
+  #cajaSistema(numero) {
+    const notas = [...this.notasPintadas()];
+    const sistemaDe = (g) => g.parentVoiceEntry?.parentStaffEntry?.parentMeasure?.ParentMusicSystem;
+    const delCompas = notas.find((g) => g.sourceNote.SourceMeasure.MeasureNumberXML === numero);
+    if (!delCompas) return null;
+    const sistema = sistemaDe(delCompas);
+    const cajas = notas
+      .filter((g) => (sistema ? sistemaDe(g) === sistema : g.sourceNote.SourceMeasure.MeasureNumberXML === numero))
+      .map((g) => g.getSVGGElement?.()?.getBoundingClientRect())
+      .filter(Boolean);
+    if (!cajas.length) return null;
+    return {
+      top: Math.min(...cajas.map((c) => c.top)),
+      bottom: Math.max(...cajas.map((c) => c.bottom)),
+      left: Math.min(...cajas.map((c) => c.left)),
+      right: Math.max(...cajas.map((c) => c.right)),
+    };
+  }
+
+  /**
+   * Si el cursor no se ve, mueve la hoja (o la página) lo justo para verlo.
    * «Se ve» de verdad: dentro de la hoja y dentro de la pantalla (la hoja puede no caber entera).
    */
   #aLaVista(el) {
@@ -108,10 +163,14 @@ export class Partitura extends EventTarget {
     const hoja = this.contenedor;
     const r = el.getBoundingClientRect();
     const h = hoja.getBoundingClientRect();
+    // En horizontal (vista «una línea»): que no se salga por la derecha ni por la izquierda
+    if (r.right > h.right || r.left < h.left) {
+      hoja.scrollTo({ left: Math.max(0, hoja.scrollLeft + (r.left - h.left) - 0.06 * hoja.clientWidth) });
+    }
     const arriba = Math.max(h.top, 0);
     const abajo = Math.min(h.bottom, window.innerHeight);
     if (r.top >= arriba && r.bottom <= abajo) return;
-    if (hoja.scrollHeight > hoja.clientHeight + 2) {
+    if (!this.unaLinea && hoja.scrollHeight > hoja.clientHeight + 2) {
       // Scroll de la propia hoja: el sistema del cursor arriba del todo
       hoja.scrollTo({ top: Math.max(0, hoja.scrollTop + (r.top - h.top) - 16) });
       if (h.top >= 0 && h.top + 16 + r.height <= window.innerHeight) return;
