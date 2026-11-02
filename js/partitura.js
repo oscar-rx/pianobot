@@ -99,15 +99,25 @@ export class Partitura extends EventTarget {
     this.osmd?.cursors[1]?.hide();
   }
 
-  /** Baja (o sube) la hoja para que se vea el sistema donde está el cursor, con un poco de margen arriba. */
+  /**
+   * Baja (o sube) la hoja para que se vea el sistema donde está el cursor, con un poco de margen arriba.
+   * «Se ve» de verdad: dentro de la hoja y dentro de la pantalla (la hoja puede no caber entera).
+   */
   #aLaVista(el) {
-    if (!el) return;
+    if (!el || el.style.display === 'none') return;
     const hoja = this.contenedor;
-    const arriba = el.offsetTop;
-    const abajo = arriba + el.offsetHeight;
-    if (arriba < hoja.scrollTop || abajo > hoja.scrollTop + hoja.clientHeight) {
-      hoja.scrollTo({ top: Math.max(0, arriba - 16) });
+    const r = el.getBoundingClientRect();
+    const h = hoja.getBoundingClientRect();
+    const arriba = Math.max(h.top, 0);
+    const abajo = Math.min(h.bottom, window.innerHeight);
+    if (r.top >= arriba && r.bottom <= abajo) return;
+    if (hoja.scrollHeight > hoja.clientHeight + 2) {
+      // Scroll de la propia hoja: el sistema del cursor arriba del todo
+      hoja.scrollTo({ top: Math.max(0, hoja.scrollTop + (r.top - h.top) - 16) });
+      if (h.top >= 0 && h.top + 16 + r.height <= window.innerHeight) return;
     }
+    // La hoja no cabe en la pantalla (o no tiene scroll propio): se mueve la página
+    window.scrollBy({ top: (hoja.scrollHeight > hoja.clientHeight + 2 ? h.top : r.top) - 12 });
   }
 
   /**

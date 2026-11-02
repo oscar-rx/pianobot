@@ -141,7 +141,8 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 /* La hoja tiene su propio scroll (cabe en la pantalla con los controles a la vista) y baja sola al tocar. */
 .hoja {
   background: #fffdf8; border-radius: 10px; border: 1px solid var(--linea); min-height: 200px; color: #111;
-  position: relative; overflow: auto; max-height: calc(100dvh - 220px); scroll-behavior: smooth; overscroll-behavior: contain;
+  /* Altura de partida; la app la ajusta al espacio que queda de verdad en la pantalla (ajustarHoja en main.js) */
+  position: relative; overflow: auto; max-height: calc(100vh - 220px); scroll-behavior: smooth; overscroll-behavior: contain;
 }
 .barra-practica { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .barra-practica .grupo { display: flex; align-items: center; gap: 6px; }

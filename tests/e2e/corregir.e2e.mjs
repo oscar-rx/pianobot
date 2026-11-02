@@ -186,6 +186,48 @@ try {
   await pagina.click('#corregir');
   comprobar((await pagina.getAttribute('#corregir', 'aria-pressed')) === 'false', 'se desactiva');
   await contexto.close();
+
+  // Tablet más pequeña (la barra de controles ocupa dos líneas) y la página desplazada antes de tocar:
+  // la línea roja tiene que verse en la pantalla de verdad, no solo dentro de la hoja.
+  for (const viewport of [{ width: 960, height: 600 }, { width: 1280, height: 720 }]) {
+    const ctx = await navegador.newContext({ viewport, hasTouch: true });
+    await ctx.route(`${APPS_SCRIPT}**`, appsScript);
+    await ctx.addInitScript(pianoFalso);
+    await ctx.addInitScript(([url, token]) => {
+      localStorage.setItem('pianobot.conexion', JSON.stringify({ url, token }));
+      localStorage.setItem('pianobot.ajustes', JSON.stringify({ zoom: 1.45, fragmentos: { prueba: { desde: 1, hasta: 16 } } }));
+    }, [APPS_SCRIPT, TOKEN]);
+    const pag = await ctx.newPage();
+    pag.on('pageerror', (e) => fallos.push(`error en la página: ${e.message}`));
+    await pag.goto(`http://localhost:${puerto}/`);
+    await pag.waitForFunction(() => / compases$/.test(document.querySelector('#partitura-estado').textContent), null, { timeout: 15000 });
+    await pag.click('#corregir');
+    await pag.waitForFunction(() => document.querySelector('#estado-punto.ok'));
+    await pag.evaluate(() => window.scrollTo(0, 400)); // como si se hubiera bajado la página
+    const visible = [];
+    await pag.exposeFunction('__visible', (v) => visible.push(v));
+    await pag.evaluate(() => {
+      // Cada vez que se mueve la línea: ¿se ve en la pantalla y dentro de la hoja?
+      const p = window.pianobot.partitura;
+      const original = p.seguirA.bind(p);
+      p.seguirA = (n) => {
+        original(n);
+        setTimeout(() => {
+          const r = p.osmd.cursors[1].cursorElement.getBoundingClientRect();
+          const h = document.querySelector('#partitura').getBoundingClientRect();
+          window.__visible(r.top >= Math.max(0, h.top) - 1 && r.bottom <= Math.min(window.innerHeight, h.bottom) + 1);
+        }, 400);
+      };
+    });
+    await pag.evaluate((ev) => window.__tocar(ev), interpretacion({ desde: 1, hasta: 16, ppm: 240 }));
+    await pag.waitForTimeout(500);
+    const vistas = visible.filter(Boolean).length;
+    comprobar(visible.length > 10 && vistas >= visible.length - 1,
+      `${viewport.width}×${viewport.height}, página desplazada: la línea roja se ve en pantalla (${vistas} de ${visible.length})`);
+    const controles = await pag.evaluate(() => document.querySelector('#corregir').getBoundingClientRect().top >= 0);
+    comprobar(controles, `${viewport.width}×${viewport.height}: los controles de arriba siguen a la vista`);
+    await ctx.close();
+  }
 } finally {
   await navegador.close();
   servidor.close();

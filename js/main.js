@@ -444,10 +444,29 @@ function pintarFragmento() {
   $('frag-siguiente').disabled = partitura.hasta >= partitura.numCompases;
 }
 
+// La hoja de la partitura ocupa el espacio que queda en la pantalla cuando la tarjeta está arriba del todo
+// (con la barra de controles a la vista), sea cual sea la tablet, y se recalcula al girarla.
+function ajustarHoja() {
+  const tarjeta = document.querySelector('.partitura');
+  const hoja = $('partitura');
+  if (hoja.hidden) return;
+  const encima = hoja.getBoundingClientRect().top - tarjeta.getBoundingClientRect().top;
+  hoja.style.maxHeight = `${Math.max(240, window.innerHeight - encima - 28)}px`;
+}
+window.addEventListener('resize', () => ajustarHoja());
+
+/** Coloca la página con la tarjeta de la partitura arriba del todo (controles y hoja enteros a la vista). */
+function encuadrarPartitura() {
+  const tarjeta = document.querySelector('.partitura');
+  const y = tarjeta.getBoundingClientRect().top + window.scrollY - 8;
+  if (Math.abs(window.scrollY - y) > 4) window.scrollTo({ top: y });
+}
+
 function verFragmento(desde, hasta) {
   if (!partitura.osmd) return;
   grabador.activar(grabador.activo); // un intento a medias de otro fragmento no vale
   partitura.mostrar(desde, hasta);
+  ajustarHoja();
   if (piezaActual) ajustes.fragmentos[piezaActual.id] = { desde: partitura.desde, hasta: partitura.hasta };
   guardar();
   pintarFragmento();
@@ -783,7 +802,11 @@ async function activarCorreccion(activo) {
   const ok = !!(activo && entrada);
   grabador.activar(ok);
   $('corregir').setAttribute('aria-pressed', String(ok));
-  if (ok) estadoPartitura(`Toca los compases ${partitura.desde}–${partitura.hasta}${textoMano()}; al parar unos segundos, se corrige.`);
+  if (ok) {
+    ajustarHoja();
+    encuadrarPartitura();
+    estadoPartitura(`Toca los compases ${partitura.desde}–${partitura.hasta}${textoMano()}; al parar unos segundos, se corrige.`);
+  }
   else if (activo) estadoPartitura('Conecta el piano para corregir.');
   else estadoPartitura(`${partitura.numCompases} compases`);
 }
@@ -799,6 +822,8 @@ $('mano').addEventListener('change', () => {
 
 grabador.addEventListener('inicio', () => {
   limpiarMarcas();
+  ajustarHoja();
+  encuadrarPartitura();
   esperadasDelIntento = esperadasDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano });
   estadoPartitura('Escuchando…');
 });
