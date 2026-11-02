@@ -41,11 +41,18 @@ try {
   const pagina = await navegador.newPage({ viewport: { width: 1280, height: 800 } });
   pagina.on('pageerror', (e) => fallos.push(`Error en la página: ${e.message}`));
   await pagina.addInitScript(pianoFalso);
+  // Ajustes de una versión anterior (con micro y pantalla): deben seguir cargando
+  await pagina.addInitScript(() => {
+    if (!localStorage.getItem('pianobot.ajustes')) {
+      localStorage.setItem('pianobot.ajustes', JSON.stringify({ fuente: 'micro', sensibilidad: 30, retrasoMs: { micro: 80, midi: 12, pantalla: 0 }, ppm: 72 }));
+    }
+  });
   await pagina.goto(`http://localhost:${puerto}/`);
-  await pagina.click('[data-fuente="midi"]');
   await pagina.click('#empezar');
   await pagina.waitForFunction(() => document.querySelector('#estado-punto.ok'));
   comprobar((await pagina.textContent('#estado-texto')).includes('Piano de prueba'), 'detecta el piano conectado');
+  comprobar((await pagina.textContent('#tempo-numero')) === '72', 'conserva los ajustes de versiones anteriores');
+  comprobar((await pagina.evaluate(() => window.pianobot.entrada.ajusteMs)) === 12, 'conserva el retraso calibrado del cable');
 
   // Acorde de La menor (La3 Do4 Mi4) a la vez
   await pagina.evaluate(() => window.__piano([0x90, 57, 70], [0x90, 60, 80], [0x90, 64, 90]));
@@ -75,11 +82,11 @@ try {
   comprobar(total === 6, `seis teclas en total (hay ${total})`);
 
   // El sonido del metrónomo se puede cambiar sin errores
-  for (const s of ['clasico', 'suave', 'tic', 'madera']) await pagina.selectOption('#sonido', s);
+  for (const s of ['clasico', 'suave', 'madera']) await pagina.selectOption('#sonido', s);
   await pagina.click('#metro-boton');
   await pagina.waitForTimeout(1200);
   await pagina.click('#metro-boton');
-  comprobar(true, 'los cuatro sonidos del metrónomo');
+  comprobar(true, 'los tres sonidos del metrónomo');
 } finally {
   await navegador.close();
   servidor.close();

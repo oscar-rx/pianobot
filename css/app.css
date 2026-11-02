@@ -74,14 +74,8 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
   border-bottom: 1px solid var(--linea);
   flex-wrap: wrap;
 }
-.marca { font: 600 1.5rem/1 var(--serif); letter-spacing: -0.01em; }
+.marca { font: 600 1.5rem/1 var(--serif); letter-spacing: -0.01em; margin-right: auto; }
 .fase { font: 500 0.75rem/1 var(--sans); color: var(--tenue); margin-left: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
-.fuentes { display: flex; gap: 4px; background: var(--suave); padding: 4px; border-radius: 999px; margin-inline: auto; }
-.fuentes button {
-  border: 0; background: transparent; padding: 8px 16px; border-radius: 999px; cursor: pointer; white-space: nowrap;
-  min-height: 44px;
-}
-.fuentes button.activa { background: var(--tarjeta); box-shadow: var(--sombra); font-weight: 600; }
 .gasto {
   display: flex; gap: 12px; align-items: center; border: 1px solid var(--linea); background: var(--tarjeta);
   border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 0.85rem; color: var(--tenue); min-height: 44px;
@@ -139,14 +133,6 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 .nota-grande.destello { animation: destello 0.35s ease-out; }
 @keyframes destello { from { color: var(--acento); transform: scale(1.04); } to { color: var(--tinta); transform: none; } }
 .nota-sub { text-align: center; color: var(--tenue); font-variant-numeric: tabular-nums; min-height: 1.4em; }
-.bloque-micro { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
-.medidor { position: relative; height: 12px; border-radius: 6px; background: var(--suave); overflow: hidden; }
-.medidor-barra { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--bien); transition: width 60ms linear; }
-.medidor-marca { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--tenue); }
-.medidor-marca.umbral { background: var(--acento); }
-.cifras { font-variant-numeric: tabular-nums; }
-td .db { font-size: 0.8em; }
-
 /* ---------- Controles ---------- */
 .control { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; }
 .control > span:first-child { color: var(--tenue); min-width: 5.5em; }
@@ -207,21 +193,6 @@ th:nth-child(n + 4) { text-align: right; }
 .barrita { display: inline-block; width: 44px; height: 8px; border-radius: 4px; background: var(--suave); position: relative; vertical-align: middle; overflow: hidden; }
 .barrita::after { content: ''; position: absolute; inset: 0 auto 0 0; width: calc(var(--v) * 100%); background: var(--tenue); }
 
-/* ---------- Teclado en pantalla ---------- */
-.teclado {
-  position: sticky; bottom: 0; display: flex; height: 150px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
-  background: var(--fondo); border-top: 1px solid var(--linea); overflow-x: auto; user-select: none; -webkit-user-select: none;
-}
-.teclado[hidden] { display: none; }
-.tecla { touch-action: none; cursor: pointer; flex: none; }
-.tecla.blanca {
-  width: 52px; height: 100%; background: #fff; border: 1px solid #bbb; border-radius: 0 0 8px 8px; color: #777;
-  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; font-size: 0.75rem;
-}
-.tecla.negra { width: 32px; height: 60%; margin: 0 -16px; z-index: 1; background: #222; border: 1px solid #000; border-radius: 0 0 6px 6px; }
-.tecla.blanca.pulsada { background: color-mix(in srgb, var(--acento) 30%, #fff); }
-.tecla.negra.pulsada { background: var(--acento); }
-
 /* ---------- Diálogo ---------- */
 dialog {
   border: 1px solid var(--linea); border-radius: var(--radio); background: var(--tarjeta); color: var(--tinta);
@@ -238,8 +209,5 @@ dialog p { margin: 0; }
 .dolares input { width: 6em; border: 1px solid var(--linea); border-radius: 10px; padding: 8px 10px; background: var(--tarjeta); }
 
 @media (max-width: 600px) {
-  .fuentes { order: 3; width: 100%; margin: 0; }
-  .fuentes button { flex: 1; min-width: 0; padding: 8px 4px; font-size: 0.85rem; white-space: normal; line-height: 1.15; }
-  .gasto { margin-left: auto; }
   .gasto-etiqueta { display: none; }
 }

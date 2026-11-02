@@ -1,11 +1,9 @@
-// pianobot · fase 1: oír. Une entradas, metrónomo, registro de notas, prueba de escala y gasto.
+// pianobot · fase 1: oír. Une el piano (MIDI), el metrónomo, el registro de notas, la prueba de escala y el gasto.
 
 import { activarAudio, ahoraSonando, contextoAudio } from './audio.js';
 import { Metronomo, SONIDOS } from './metronomo.js';
 import { EntradaMidi } from './entradas/midi.js';
-import { EntradaMicro } from './entradas/micro.js';
-import { EntradaPantalla } from './entradas/pantalla.js';
-import { nombreNota, nombreIngles, frecuenciaAMidi } from './notas.js';
+import { nombreNota, nombreIngles } from './notas.js';
 import { PruebaEscala, ESCALAS } from './prueba-escala.js';
 import { ContadorGasto, formatoDolares, mesDe } from './gasto.js';
 
@@ -14,18 +12,21 @@ const $ = (id) => document.getElementById(id);
 // ---------- Ajustes guardados ----------
 const CLAVE_AJUSTES = 'pianobot.ajustes';
 const ajustes = {
-  fuente: 'micro',
   ppm: 60,
   compas: 4,
   subdivision: 1,
   volumen: 0.7,
   sonido: 'madera',
-  sensibilidad: 12,
   escala: 'la-menor',
-  retrasoMs: { micro: 0, midi: 0, pantalla: 0 },
+  retrasoMs: 0,
 };
 try {
-  Object.assign(ajustes, JSON.parse(localStorage.getItem(CLAVE_AJUSTES) || '{}'));
+  const guardados = JSON.parse(localStorage.getItem(CLAVE_AJUSTES) || '{}');
+  // Versiones anteriores guardaban un retraso por fuente (micro, cable, pantalla): se queda el del cable.
+  if (guardados.retrasoMs && typeof guardados.retrasoMs === 'object') guardados.retrasoMs = guardados.retrasoMs.midi ?? 0;
+  delete guardados.fuente;
+  delete guardados.sensibilidad;
+  Object.assign(ajustes, guardados);
 } catch {}
 const guardar = () => {
   try {
@@ -41,57 +42,21 @@ metronomo.volumen = ajustes.volumen;
 metronomo.sonido = SONIDOS[ajustes.sonido] ? ajustes.sonido : 'madera';
 
 const gasto = new ContadorGasto();
-let entrada = null; // la entrada activa
+let entrada = null; // el piano, mientras se escucha
 let origen = null; // tiempo (reloj de audio) de la primera nota, para mostrar momentos relativos
 let prueba = new PruebaEscala(ESCALAS[ajustes.escala]?.notas ?? ESCALAS['la-menor'].notas);
 let calibrando = null; // {desajustes: []}
 const filasActivas = new Map(); // midi → {fila, inicio}
-const pulsadas = new Map(); // midi → frecuencia (o null): las teclas que suenan ahora, para ver acordes
+const pulsadas = new Set(); // las teclas que suenan ahora, para ver acordes
 let cuentaNotas = 0;
 let ultimoAtaque = null; // momento del último noteon, para reconocer acordes
 let bloqueoPantalla = null;
 
-// ---------- Elección de fuente ----------
-function pintarFuentes() {
-  for (const b of document.querySelectorAll('[data-fuente]')) {
-    const activa = b.dataset.fuente === ajustes.fuente;
-    b.setAttribute('aria-checked', String(activa));
-    b.classList.toggle('activa', activa);
-  }
-  $('bloque-micro').hidden = ajustes.fuente !== 'micro';
-  avisoSonido();
-}
-
-function avisoSonido() {
-  $('aviso-sonido').hidden = !(ajustes.fuente === 'micro' && SONIDOS[metronomo.sonido]?.conTono);
-}
-
-for (const b of document.querySelectorAll('[data-fuente]')) {
-  b.addEventListener('click', async () => {
-    if (ajustes.fuente === b.dataset.fuente) return;
-    const estabaEscuchando = !!entrada;
-    detenerEntrada();
-    ajustes.fuente = b.dataset.fuente;
-    guardar();
-    pintarFuentes();
-    if (estabaEscuchando) await empezar();
-    else ponerEstado('Pulsa Empezar.', false);
-  });
-}
-
-function crearEntrada(fuente) {
-  if (fuente === 'midi') return new EntradaMidi();
-  if (fuente === 'pantalla') return new EntradaPantalla($('teclado'));
-  const m = new EntradaMicro();
-  m.sensibilidadDb = ajustes.sensibilidad;
-  return m;
-}
-
 async function empezar() {
   await activarAudio();
   detenerEntrada();
-  entrada = crearEntrada(ajustes.fuente);
-  entrada.ajusteMs = ajustes.retrasoMs[ajustes.fuente] ?? 0;
+  entrada = new EntradaMidi();
+  entrada.ajusteMs = ajustes.retrasoMs;
   entrada.addEventListener('estado', (e) => ponerEstado(e.detail.texto, e.detail.ok));
   entrada.addEventListener('nota', (e) => alRecibirNota(e.detail));
   entrada.addEventListener('pedal', (e) => {
@@ -103,7 +68,7 @@ async function empezar() {
     await entrada.iniciar();
   } catch (err) {
     console.error(err);
-    if (err?.name === 'NotAllowedError') ponerEstado('No hay permiso. Actívalo en el candado de la barra de direcciones.', false);
+    if (err?.name === 'NotAllowedError') ponerEstado('No hay permiso para el MIDI. Actívalo en el candado de la barra de direcciones.', false);
     else if (!$('estado-texto').textContent.includes('navegador')) ponerEstado(`No se ha podido empezar: ${err.message}`, false);
     detenerEntrada();
     return;
@@ -149,16 +114,11 @@ function ponerEstado(texto, ok) {
 // Al soltar, se queda lo último que sonó hasta la siguiente nota.
 function pintarNotaGrande(destello) {
   if (!pulsadas.size) return;
-  const midis = [...pulsadas.keys()].sort((a, b) => a - b);
+  const midis = [...pulsadas].sort((a, b) => a - b);
   const grande = $('nota-actual');
   grande.textContent = midis.map(nombreNota).join(' ');
   grande.dataset.cuantas = Math.min(midis.length, 4);
   let sub = midis.map(nombreIngles).join(' ');
-  const f = midis.length === 1 ? pulsadas.get(midis[0]) : null;
-  if (f) {
-    const cents = Math.round((frecuenciaAMidi(f) - midis[0]) * 100);
-    sub += ` · ${f.toFixed(1)} Hz · ${cents >= 0 ? '+' : ''}${cents} cents`;
-  }
   if (midis.length > 1) sub += ` · ${midis.length} notas`;
   $('nota-sub').textContent = sub;
   if (destello) {
@@ -183,7 +143,7 @@ function alRecibirNota(n) {
   const desajuste = metronomo.sonando || metronomo.pulsos.length ? metronomo.desajuste(n.tiempo, ajustes.subdivision) : null;
 
   // Nota grande: si no queda nada pulsado, empieza un grupo nuevo
-  pulsadas.set(n.midi, n.frecuencia ?? null);
+  pulsadas.add(n.midi);
   pintarNotaGrande(true);
 
   // Registro
@@ -195,7 +155,7 @@ function alRecibirNota(n) {
   fila.append(
     celda(momento.toFixed(3) + ' s', 'num tenue'),
     celda(nombreNota(n.midi), 'nota'),
-    celdaFuerza(n.velocidad, n.fuente, n.nivelDb),
+    celdaFuerza(n.velocidad),
     celdaDura,
     celdaDesajuste(desajuste),
   );
@@ -229,20 +189,14 @@ function celda(texto, clase) {
   return td;
 }
 
-function celdaFuerza(v, fuente, nivelDb) {
+function celdaFuerza(v) {
   const td = document.createElement('td');
   td.className = 'fuerza';
   const barra = document.createElement('span');
   barra.className = 'barrita';
-  barra.style.setProperty('--v', (v ?? 0) / 127);
-  td.append(barra, document.createTextNode(` ${v ?? '–'}${fuente === 'micro' ? '≈' : ''}`));
-  if (nivelDb != null) {
-    const db = document.createElement('span');
-    db.className = 'tenue db';
-    db.textContent = ` ${Math.round(nivelDb)} dB`;
-    td.append(db);
-  }
-  td.title = fuente === 'micro' ? 'Aproximada a partir del volumen que oye el micro' : 'Velocidad MIDI (1-127)';
+  barra.style.setProperty('--v', v / 127);
+  td.append(barra, document.createTextNode(` ${v}`));
+  td.title = 'Velocidad MIDI (1-127)';
   return td;
 }
 
@@ -365,7 +319,6 @@ $('sonido').addEventListener('change', async () => {
   metronomo.sonido = $('sonido').value;
   ajustes.sonido = metronomo.sonido;
   guardar();
-  avisoSonido();
   await activarAudio();
   if (!metronomo.sonando) metronomo.probar();
 });
@@ -396,24 +349,12 @@ $('calibrar').addEventListener('click', async () => {
 function terminarCalibracion() {
   const d = [...calibrando.desajustes].sort((a, b) => a - b);
   const mediana = (d[3] + d[4]) / 2;
-  const fuente = ajustes.fuente;
-  const nuevo = Math.round((ajustes.retrasoMs[fuente] ?? 0) + mediana * 1000);
-  ajustes.retrasoMs[fuente] = nuevo;
-  if (entrada) entrada.ajusteMs = nuevo;
+  ajustes.retrasoMs = Math.round(ajustes.retrasoMs + mediana * 1000);
+  if (entrada) entrada.ajusteMs = ajustes.retrasoMs;
   guardar();
   calibrando = null;
-  $('calibrar-texto').textContent = `Hecho: retraso corregido ${nuevo} ms para ${fuente === 'micro' ? 'el micro' : fuente === 'midi' ? 'el cable' : 'la pantalla'}.`;
+  $('calibrar-texto').textContent = `Hecho: retraso corregido ${ajustes.retrasoMs} ms.`;
 }
-
-// ---------- Umbral del micro (dB por encima del ruido de fondo) ----------
-$('sensibilidad').value = ajustes.sensibilidad;
-$('sensibilidad-valor').textContent = `${ajustes.sensibilidad} dB`;
-$('sensibilidad').addEventListener('input', () => {
-  ajustes.sensibilidad = +$('sensibilidad').value;
-  $('sensibilidad-valor').textContent = `${ajustes.sensibilidad} dB`;
-  guardar();
-  if (entrada instanceof EntradaMicro) entrada.configurar({ sensibilidadDb: ajustes.sensibilidad });
-});
 
 // ---------- Gasto ----------
 function pintarGasto() {
@@ -447,7 +388,7 @@ $('gasto-tope').addEventListener('change', () => {
 // Para que la fase 4 (y las pruebas) puedan apuntar llamadas: window.pianobot.gasto.registrar(modelo, usage)
 window.pianobot = { gasto, metronomo, get entrada() { return entrada; } };
 
-// ---------- Bucle de dibujo: pulsos y medidor ----------
+// ---------- Bucle de dibujo: pulsos del metrónomo ----------
 function dibujar() {
   requestAnimationFrame(dibujar);
   const c = contextoAudio();
@@ -461,37 +402,11 @@ function dibujar() {
       puntos[i].classList.toggle('encendido', !!encendido);
     }
   }
-  if (entrada instanceof EntradaMicro) {
-    const l = entrada.lectura;
-    if (l) {
-      const pct = (db) => `${Math.max(0, Math.min(100, ((db + 90) / 90) * 100))}%`;
-      $('medidor-barra').style.width = pct(l.rmsDb);
-      const umbral = entrada.analizador.seguidor.umbralAtaque;
-      $('medidor-fondo').hidden = $('medidor-umbral').hidden = l.fondoDb == null;
-      if (l.fondoDb != null) {
-        $('medidor-fondo').style.left = pct(l.fondoDb);
-        $('medidor-umbral').style.left = pct(umbral);
-      }
-      // Cifras para afinar: se refrescan unas 4 veces por segundo para que se puedan leer.
-      const ahora = performance.now();
-      if (ahora - (dibujar.ultimasCifras ?? 0) > 250) {
-        dibujar.ultimasCifras = ahora;
-        dibujar.picoReciente = Math.max(l.rmsDb, (dibujar.picoReciente ?? -120) - 6);
-        $('medidor-cifras').textContent =
-          l.fondoDb == null
-            ? 'Midiendo el silencio… no toques un momento.'
-            : `Ahora ${Math.round(dibujar.picoReciente)} dB · ruido ${Math.round(l.fondoDb)} dB · umbral ${Math.round(umbral)} dB`;
-      } else {
-        dibujar.picoReciente = Math.max(l.rmsDb, dibujar.picoReciente ?? -120);
-      }
-    }
-  }
 }
 
 // ---------- Arranque ----------
-pintarFuentes();
 pintarMetronomo();
 pintarEscala();
 pintarGasto();
 requestAnimationFrame(dibujar);
-if (!window.isSecureContext) ponerEstado('Abre la app por https para poder usar el micro y el MIDI.', false);
+if (!window.isSecureContext) ponerEstado('Abre la app por https para poder usar el MIDI.', false);

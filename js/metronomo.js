@@ -1,14 +1,12 @@
 // Metrónomo programado con antelación en el reloj del audio (no depende de los timers).
-// Varios sonidos, todos sintetizados (sin ficheros). «Tic» es una ráfaga de ruido agudo sin
-// altura: es el único que el modo micro nunca confunde con una nota.
+// Varios sonidos, todos sintetizados (sin ficheros).
 
 import { contextoAudio } from './audio.js';
 
 export const SONIDOS = {
-  madera: { nombre: 'Madera', conTono: true },
-  clasico: { nombre: 'Pitido', conTono: true },
-  suave: { nombre: 'Suave', conTono: true },
-  tic: { nombre: 'Tic (para el micro)', conTono: false },
+  madera: { nombre: 'Madera' },
+  clasico: { nombre: 'Pitido' },
+  suave: { nombre: 'Suave' },
 };
 
 export class Metronomo extends EventTarget {
@@ -60,15 +58,11 @@ export class Metronomo extends EventTarget {
   #rafaga(c, cuando, { tipo, frecuencia, q = 1, pico, caida, duracion }) {
     const src = c.createBufferSource();
     src.buffer = this.#ruido(c);
-    let nodo = src;
-    for (let i = 0; i < (tipo === 'highpass' ? 2 : 1); i++) {
-      const f = c.createBiquadFilter();
-      f.type = tipo;
-      f.frequency.value = frecuencia;
-      f.Q.value = q;
-      nodo = nodo.connect(f);
-    }
-    nodo.connect(this.#envolvente(c, cuando, pico, caida, duracion));
+    const f = c.createBiquadFilter();
+    f.type = tipo;
+    f.frequency.value = frecuencia;
+    f.Q.value = q;
+    src.connect(f).connect(this.#envolvente(c, cuando, pico, caida, duracion));
     src.start(cuando);
     src.stop(cuando + duracion);
   }
@@ -88,11 +82,8 @@ export class Metronomo extends EventTarget {
       case 'clasico':
         this.#tono(c, cuando, 'triangle', acento ? 1320 : 880, 0.4 * v, 0.03, 0.12);
         break;
-      case 'suave':
+      default: // suave
         this.#tono(c, cuando, 'sine', acento ? 784 : 523, 0.5 * v, 0.025, 0.15);
-        break;
-      default:
-        this.#rafaga(c, cuando, { tipo: 'highpass', frecuencia: acento ? 5000 : 6500, pico: (acento ? 1.2 : 0.8) * v, caida: acento ? 0.009 : 0.006, duracion: 0.05 });
     }
   }
 

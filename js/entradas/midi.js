@@ -1,11 +1,12 @@
-// Entrada por cable: Web MIDI (Chrome en Android y escritorio).
+// El piano por cable: Web MIDI (Chrome en Android y escritorio).
+// Emite 'nota' ({tipo: 'noteon'|'noteoff', midi, velocidad, tiempo}), 'pedal' y 'estado'.
+// `tiempo` va en segundos del reloj de audio, tal como suena (ver audio.js).
 
 import { tiempoDesdePerformance } from '../audio.js';
 
 export class EntradaMidi extends EventTarget {
   constructor() {
     super();
-    this.nombre = 'midi';
     this.acceso = null;
     this.ajusteMs = 0;
     this._alMensaje = (e) => this.#mensaje(e);
@@ -62,7 +63,7 @@ export class EntradaMidi extends EventTarget {
   }
 
   #nota(n) {
-    this.dispatchEvent(new CustomEvent('nota', { detail: { ...n, fuente: 'midi' } }));
+    this.dispatchEvent(new CustomEvent('nota', { detail: n }));
   }
 
   #estado(texto, ok) {

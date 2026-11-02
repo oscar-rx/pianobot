@@ -13,12 +13,6 @@
   <header class="barra">
     <div class="marca">pianobot <span class="fase">fase 1 · oír</span></div>
 
-    <div class="fuentes" role="radiogroup" aria-label="Cómo escucha la app">
-      <button type="button" role="radio" data-fuente="micro">🎙️ Micrófono</button>
-      <button type="button" role="radio" data-fuente="midi">🎹 Piano (cable)</button>
-      <button type="button" role="radio" data-fuente="pantalla">⌨️ Pantalla</button>
-    </div>
-
     <button type="button" id="gasto" class="gasto" title="Gasto de la API de Claude">
       <span class="gasto-etiqueta">API</span>
       <span>sesión <b id="gasto-sesion">$0.00</b></span>
@@ -33,28 +27,11 @@
       <h2 id="t-ahora" class="oculto">Lo que suena</h2>
       <div class="fila-estado">
         <span id="estado-punto" class="punto"></span>
-        <span id="estado-texto">Elige cómo escuchar y pulsa Empezar.</span>
+        <span id="estado-texto">Conecta el piano por USB y pulsa Empezar.</span>
         <span id="pedal" class="pastilla" hidden>Pedal</span>
       </div>
       <div class="nota-grande" id="nota-actual" aria-live="polite">—</div>
       <div class="nota-sub" id="nota-sub">&nbsp;</div>
-
-      <div id="bloque-micro" class="bloque-micro" hidden>
-        <div class="medidor" aria-hidden="true">
-          <div class="medidor-barra" id="medidor-barra"></div>
-          <div class="medidor-marca fondo" id="medidor-fondo" title="Ruido de fondo"></div>
-          <div class="medidor-marca umbral" id="medidor-umbral" title="Umbral para contar una nota"></div>
-        </div>
-        <p class="ayuda cifras" id="medidor-cifras">Midiendo el silencio…</p>
-        <label class="control">
-          <span>Umbral</span>
-          <input type="range" id="sensibilidad" min="4" max="40" step="1" aria-describedby="umbral-ayuda">
-          <output id="sensibilidad-valor"></output>
-        </label>
-        <p class="ayuda" id="umbral-ayuda">Cuánto tiene que sonar una nota por encima del ruido de la habitación (marca roja).
-          Si salen notas que no has tocado, súbelo. Si se pierden notas suaves, bájalo.
-          Una nota cada vez: una mano y sin pedal.</p>
-      </div>
 
       <button type="button" id="empezar" class="primario">Empezar</button>
     </section>
@@ -86,7 +63,6 @@
         <label class="control"><span>Sonido</span>
           <select id="sonido"></select>
         </label>
-        <p class="ayuda aviso-sonido" id="aviso-sonido" hidden>Con el micro, este sonido puede colarse como nota. Para el micro, mejor «Tic».</p>
         <label class="control"><span>Volumen</span>
           <input type="range" id="volumen" min="0" max="1" step="0.05">
         </label>
@@ -124,8 +100,6 @@
       </div>
     </section>
   </main>
-
-  <div id="teclado" class="teclado" hidden></div>
 
   <dialog id="dialogo-gasto">
     <form method="dialog">

@@ -1,4 +1,4 @@
-// Un único AudioContext para toda la app: es el reloj común de metrónomo, MIDI y micro.
+// Un único AudioContext para toda la app: es el reloj común del metrónomo y del piano.
 // Todos los tiempos de nota van en segundos de este reloj, «tal como suenan»:
 // comparables directamente con el momento en que suena cada clic del metrónomo.
 

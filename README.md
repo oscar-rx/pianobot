@@ -7,49 +7,29 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
 ## Qué hace ya
 
-- **Tres formas de escuchar:**
-  - 🎙️ **Micrófono:** para ir probando sin el cable. El micro de la tablet oye el piano y saca las notas.
-    Va con una nota cada vez: una mano y sin pedal.
-  - 🎹 **Piano (cable):** MIDI por USB. Es el modo bueno: notas exactas, fuerza real y las dos manos.
-  - ⌨️ **Pantalla:** un teclado táctil para comprobar que la app funciona sin piano.
-- **Metrónomo** con tempo, compás, volumen y cuatro sonidos: Madera, Pitido, Suave y Tic (el único que el micro
-  nunca confunde con una nota).
-- **Acordes y dos voces:** con el cable, la nota grande enseña todas las teclas que suenan a la vez, y una
-  etiqueta avisa cuando pisas el pedal.
-- **Registro de notas:** cada nota con su momento, su fuerza, cuánto dura y su **desajuste** respecto al pulso
+- **Lee el piano por cable (MIDI por USB):** cada tecla por separado, con su momento, su fuerza (1-127) y cuánto
+  la mantienes. Recoge acordes, las dos manos a la vez y el pedal.
+- **Nota grande:** enseña todas las teclas que suenan a la vez y avisa cuando pisas el pedal.
+- **Metrónomo** con tempo, compás, volumen y tres sonidos: Madera, Pitido y Suave.
+- **Registro de notas:** momento, nota, fuerza, duración y **desajuste** respecto al pulso
   (negativo = adelantada, positivo = retrasada).
 - **Prueba de escala:** el criterio de «listo» de la fase 1. Tocas la escala subiendo y bajando, y la app marca
-  cada nota que oye bien, las que se pierden y las que sobran.
+  cada nota bien, perdida o de más. Las notas de un acorde no cuentan.
+- **Calibrar retraso:** con el metrónomo en marcha, tocas 8 notas justo con el clic y la app corrige el retraso
+  del sistema, para que el desajuste salga bien medido.
 - **Gasto de la API** en la esquina: lo que llevas en la sesión y en el mes, en dólares, con aviso si pasas el
   tope que elijas. Ahora mismo marca $0, porque el profe (Claude) llega en la fase 4.
-- **Calibrar retraso:** con el metrónomo en marcha, tocas 8 notas justo con el clic y la app corrige el retraso
-  del sistema, para que el desajuste salga bien medido. Se calibra aparte para el micro y para el cable.
 
-## Cómo probarlo en la tablet
+## Cómo usarlo
 
-1. Abre la web en **Chrome**: `https://oscar-rx.github.io/pianobot/` (cuando GitHub Pages esté activado, ver abajo).
-2. Elige **Micrófono** y pulsa **Empezar**. Acepta el permiso del micro.
-3. Pon la tablet cerca del piano, con el piano sonando por su altavoz.
-4. Toca notas sueltas: aparecen en grande y en la tabla.
-5. Prueba de la fase 1: metrónomo a 60, «Medir contra: negras», escala de La menor armónica.
+1. Conecta el piano a la tablet con el cable USB.
+2. Abre https://oscar-rx.github.io/pianobot/ en **Chrome** y pulsa **Empezar**. Debe poner «Conectado:» y el
+   nombre del piano.
+3. Prueba de la fase 1: metrónomo a 60, «Medir contra: negras», escala de La menor armónica.
    Si sale «¡Entera!», el oído funciona.
 
-Consejos para el micro:
-
-- **Umbral:** cuántos dB tiene que sonar una nota por encima del ruido de la habitación. Si salen notas que no
-  has tocado, súbelo. Si se pierden notas suaves, bájalo.
-  La barra verde es el volumen que oye, la marca gris es el ruido de fondo y la roja, el umbral. Debajo salen las
-  cifras, y en la tabla, los dB de cada nota: así se ve a qué altura poner el umbral.
-- Al empezar, la app tarda un momento en medir el silencio; durante ese rato no cuenta notas.
-- El clic del metrónomo no cuenta como nota: es un ruido agudo sin tono, y el micro lo filtra.
-- Con pedal o con legato muy pegado, el micro se lía: oye dos notas a la vez.
-  Para eso hará falta el cable.
-
-### Activar GitHub Pages (una vez)
-
-En GitHub: **Settings → Pages → Build and deployment → Deploy from a branch**, elegir la rama y la carpeta
-`/ (root)`. Al cabo de un minuto la web está en `https://oscar-rx.github.io/pianobot/`.
-Hace falta https para que Chrome deje usar el micro y el MIDI.
+La web se publica sola con GitHub Pages desde la rama `claude/jolly-lamport-ytnces`. Si después de un cambio la
+tablet enseña la versión antigua, cierra la pestaña y vuelve a abrirla.
 
 ## Cómo está hecho
 
@@ -58,37 +38,23 @@ Web estática, sin compilar nada, con módulos JavaScript que GitHub Pages sirve
 ```
 index.html, css/app.css     la interfaz (pensada para tablet en horizontal sobre el atril)
 js/main.js                  une todo
-js/audio.js                 reloj común: metrónomo, MIDI y micro se miden en el mismo reloj
+js/audio.js                 reloj común: metrónomo y piano se miden en el mismo reloj
 js/metronomo.js             metrónomo programado con antelación (no se desfasa)
-js/entradas/midi.js         Web MIDI
-js/entradas/micro.js        micrófono → filtros → worklet → analizador
-js/entradas/pantalla.js     teclado táctil
-js/dsp/yin.js               detector de altura (YIN, con FFT)
-js/dsp/seguidor-notas.js    de «energía + altura» a notas con su momento y su fuerza
-js/dsp/analizador.js        une los dos anteriores; no depende del navegador
+js/entradas/midi.js         el piano por Web MIDI
+js/notas.js                 nombres de notas (Do4 = Do central)
 js/prueba-escala.js         la prueba de la fase 1
 js/gasto.js                 precios por modelo y contador de gasto
 ```
 
-Todas las entradas dan el mismo evento de nota: `{tipo, midi, velocidad, tiempo, fuente}`, con `tiempo` en
-segundos del reloj de audio. La fase 3 (comparar con la partitura) podrá usar cualquiera de las tres.
-
-### Cómo funciona el modo micro
-
-1. Filtros: se quitan los retumbos (< 45 Hz) y todo lo que pasa de 3 kHz, donde están el clic y los siseos.
-2. Cada 5 ms se mide la energía y la altura (YIN sobre unos 43 ms de audio).
-3. Hay nota nueva cuando la energía sube de golpe y aparece un tono estable, o cuando cambia la altura en
-   legato. Un golpe sin tono se descarta.
-4. El momento de la nota se toma del ataque, no de cuando se reconoce. Así el desajuste rítmico sale bien.
-
-En pruebas con audio sintético de piano, con dinámica normal y sin pedal, acierta el 97-99 % de las notas,
-con un error de tiempo de unos 5 ms de media.
+El piano emite eventos `{tipo: 'noteon'|'noteoff', midi, velocidad, tiempo}` y `pedal`, con `tiempo` en segundos
+del reloj de audio: se pueden comparar directamente con los clics del metrónomo. Es lo que usará la fase 3 para
+comparar con la partitura.
 
 ## Pruebas
 
 ```bash
-npm test          # detector, seguidor de notas, gasto y prueba de escala (Node 22)
-npm run e2e       # en Chrome: un .wav como micro (la escala debe salir entera) y un piano MIDI simulado
+npm test          # gasto y prueba de escala (Node 22)
+npm run e2e       # en Chrome con un piano MIDI simulado: acordes, fuerza, pedal y dos voces
 npm run servir    # la app en http://localhost:8080
 ```
 
