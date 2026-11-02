@@ -3,6 +3,14 @@
 
 import { contextoAudio } from './audio.js';
 
+// Figura que marca cada clic. «♪ = 60» da un clic por corchea: un compás lento se sigue mejor así
+// que con una negra a 30.
+export const PULSOS = {
+  negra: { unidad: 1, simbolo: '♩', nombre: 'negra' },
+  corchea: { unidad: 0.5, simbolo: '♪', nombre: 'corchea' },
+  semicorchea: { unidad: 0.25, simbolo: '♬', nombre: 'semicorchea' },
+};
+
 export const SONIDOS = {
   madera: { nombre: 'Madera' },
   clasico: { nombre: 'Pitido' },
@@ -12,7 +20,8 @@ export const SONIDOS = {
 export class Metronomo extends EventTarget {
   constructor() {
     super();
-    this.ppm = 60;
+    this.ppm = 60; // clics por minuto (de la figura de `pulso`)
+    this.pulso = 'negra';
     this.pulsosPorCompas = 4;
     this.volumen = 0.7;
     this.sonido = 'madera';
@@ -125,6 +134,27 @@ export class Metronomo extends EventTarget {
     this.dispatchEvent(new Event('cambio'));
   }
 
+  /** Negras que dura cada clic (1, ½, ¼). */
+  get unidad() {
+    return PULSOS[this.pulso]?.unidad ?? 1;
+  }
+
+  /** Segundos que dura una negra a este tempo y pulso. */
+  get segundosPorNegra() {
+    return 60 / this.ppm / this.unidad;
+  }
+
+  /** Tempo equivalente en negras por minuto. */
+  get negrasPorMinuto() {
+    return this.ppm * this.unidad;
+  }
+
+  ponerPulso(pulso) {
+    if (!PULSOS[pulso]) return;
+    this.pulso = pulso;
+    this.dispatchEvent(new Event('cambio'));
+  }
+
   ponerTempo(ppm) {
     this.ppm = Math.max(20, Math.min(240, Math.round(ppm)));
     this.dispatchEvent(new Event('cambio'));
@@ -137,7 +167,7 @@ export class Metronomo extends EventTarget {
   desajuste(tiempo, subdivision = 1) {
     if (!this.pulsos.length) return null;
     const primero = this.pulsos[0];
-    const periodo = 60 / this.ppm / subdivision;
+    const periodo = this.segundosPorNegra / subdivision; // subdivisión de la negra, sea cual sea el pulso
     // Solo tiene sentido mientras suena o justo después
     const ultimo = this.pulsos[this.pulsos.length - 1];
     if (tiempo < primero.tiempo - periodo || tiempo > ultimo.tiempo + 2 * periodo) return null;

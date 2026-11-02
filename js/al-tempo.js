@@ -25,14 +25,18 @@ export class PracticaAlTempo {
     this.t0 = t0;
     this.negra = negra;
     this.tFin = t0 + duracion * negra;
-    // Margen de cada nota: proporcional a lo juntas que van las de su mano (entre 80 y 250 ms)
+    // Margen de cada nota: la mitad del hueco hasta la nota más cercana de su mano (una nota cuenta si cae más
+    // cerca de su sitio que del de la vecina), entre 120 y 350 ms.
     const posPorMano = new Map();
     for (const e of esperadas) posPorMano.set(e.mano, [...(posPorMano.get(e.mano) ?? []), e.pos]);
     this.notas = esperadas.map((e) => {
       const otras = posPorMano.get(e.mano).filter((p) => p !== e.pos);
       const espaciado = otras.length ? Math.min(...otras.map((p) => Math.abs(p - e.pos))) : 1;
-      return { e, t: t0 + e.pos * negra, margen: Math.min(0.25, Math.max(0.08, 0.45 * espaciado * negra)), estado: null, tocada: null };
+      return { e, t: t0 + e.pos * negra, margen: Math.min(0.35, Math.max(0.12, 0.5 * espaciado * negra)), estado: null, tocada: null };
     });
+    // Retraso constante (del teclado o de costumbre): la mediana de los últimos aciertos, hasta ±150 ms, se descuenta
+    // al juzgar si una nota va a tiempo. El desajuste real se sigue midiendo y apuntando.
+    this.desvios = [];
     this.sobrantes = [];
     this.abiertas = new Map();
   }
@@ -47,8 +51,9 @@ export class PracticaAlTempo {
     }
     const tocada = { midi, t: tiempo, fin: null };
     this.abiertas.set(midi, tocada);
-    const cerca = this.notas.filter((n) => !n.estado && Math.abs(tiempo - n.t) <= n.margen);
-    const distancia = (n) => Math.abs(tiempo - n.t);
+    const sesgo = this.sesgo;
+    const cerca = this.notas.filter((n) => !n.estado && Math.abs(tiempo - n.t - sesgo) < n.margen);
+    const distancia = (n) => Math.abs(tiempo - n.t - sesgo);
     const misma = cerca.filter((n) => n.e.midi === midi).sort((a, b) => distancia(a) - distancia(b))[0];
     const elegida = misma ?? cerca.sort((a, b) => distancia(a) - distancia(b) || Math.abs(a.e.midi - midi) - Math.abs(b.e.midi - midi))[0];
     if (!elegida) {
@@ -57,14 +62,25 @@ export class PracticaAlTempo {
     }
     elegida.estado = misma ? 'bien' : 'fallada';
     elegida.tocada = tocada;
+    if (misma) {
+      this.desvios.push(tiempo - elegida.t);
+      if (this.desvios.length > 8) this.desvios.shift();
+    }
     return [{ clave: elegida.e.clave, estado: elegida.estado }];
+  }
+
+  /** El retraso (o adelanto) constante que se está descontando, en segundos. */
+  get sesgo() {
+    if (this.desvios.length < 3) return 0;
+    return Math.max(-0.15, Math.min(0.15, mediana(this.desvios)));
   }
 
   /** Avanza el reloj: las notas cuyo momento ya ha pasado sin tocarlas quedan omitidas. */
   avanzar(ahora) {
     const cambios = [];
+    const sesgo = this.sesgo;
     for (const n of this.notas) {
-      if (!n.estado && ahora > n.t + n.margen) {
+      if (!n.estado && ahora > n.t + Math.max(0, sesgo) + n.margen) {
         n.estado = 'omitida';
         cambios.push({ clave: n.e.clave, estado: 'omitida' });
       }

@@ -297,8 +297,10 @@ test('ficheros convertidos de Capella: el título y el autor se sacan de los tex
 
 const PETICION = {
   sesion: 'S20261102-1700',
-  pieza: { titulo: 'Invención n.º 13', compositor: 'J. S. Bach', compases: 25, compas: '4/4', tempoObjetivo: 80 },
-  ahora: { desde: 9, hasta: 12, mano: 'ambas', tempo: 60 },
+  pieza: { titulo: 'Invención n.º 13', compositor: 'J. S. Bach', compases: 25, compas: '4/4', tempoObjetivo: 80, figuraMasCorta: '1-25: semicorchea' },
+  ahora: { desde: 9, hasta: 12, mano: 'ambas', modo: 'metronomo', pulso: 'corchea', tempo: 60 },
+  vecesTotal: 9,
+  vecesLimpias: 0,
   intentos: [
     { desde: 9, hasta: 12, mano: 'ambas', tempo: 60, total: { notas: 97, bien: 92, falladas: 3, omitidas: 2, titubeos: 1, desajusteMs: -12 },
       filas: [{ compas: 11, mano: 'derecha', falladas: 3, articulacion: 80 }, { compas: 12, mano: 'izquierda', falladas: 0, articulacion: 90 }],
@@ -316,7 +318,7 @@ const respuestaApi = (instruccion, extra = {}) => ({
     ...extra,
   },
 });
-const BUENA = { decir: 'El 11 se te atasca en el salto. Solo el 11, mano derecha.', accion: 'cambiar', desde: 11, hasta: 11, mano: 'derecha', tempo: 52, repeticiones: 4 };
+const BUENA = { decir: 'El 11 se te atasca en el salto. Solo el 11, mano derecha.', accion: 'cambiar', desde: 11, hasta: 11, mano: 'derecha', modo: 'notas', pulso: 'corchea', tempo: 52, repeticiones: 1, hastaLimpio: true };
 
 test('profe: llama a Claude bien (modelo, cabeceras, JSON estructurado) y devuelve la instrucción', () => {
   const { enviar, peticionesApi } = entorno({ api: () => respuestaApi(BUENA) });
@@ -336,6 +338,10 @@ test('profe: llama a Claude bien (modelo, cabeceras, JSON estructurado) y devuel
   const contexto = JSON.parse(cuerpo.messages[0].content);
   assert.equal(contexto.comentario, 'estoy un poco cansado');
   assert.equal(contexto.intentos[0].filas[0].compas, 11);
+  assert.equal(contexto.vecesTotal, 9);
+  assert.equal(contexto.pieza.figuraMasCorta, '1-25: semicorchea');
+  assert.deepEqual([...cuerpo.output_config.format.schema.required].sort(), ['accion', 'decir', 'desde', 'hasta', 'hastaLimpio', 'mano', 'modo', 'pulso', 'repeticiones', 'tempo']);
+  assert.match(cuerpo.system, /corchea = 60/);
   assert.match(cuerpo.system, /profe de piano/);
 });
 
@@ -371,10 +377,10 @@ test('profe: apunta el gasto y los intentos en el Sheet', () => {
 });
 
 test('profe: una respuesta fuera de rango se deja en algo que la app puede hacer', () => {
-  const loca = { decir: '  Venga.  ', accion: 'bailar', desde: 40, hasta: 3, mano: 'pie', tempo: 999, repeticiones: 50 };
+  const loca = { decir: '  Venga.  ', accion: 'bailar', desde: 40, hasta: 3, mano: 'pie', modo: 'karaoke', pulso: 'redonda', tempo: 999, repeticiones: 50, hastaLimpio: 'sí' };
   const { enviar } = entorno({ api: () => respuestaApi(loca) });
   const { instruccion } = enviar({ accion: 'profe', token: 'secreto', peticion: PETICION });
-  assert.deepEqual(instruccion, { decir: 'Venga.', accion: 'repetir', desde: 3, hasta: 25, mano: 'ambas', tempo: 240, repeticiones: 6 });
+  assert.deepEqual(instruccion, { decir: 'Venga.', accion: 'repetir', desde: 3, hasta: 25, mano: 'ambas', modo: 'metronomo', pulso: 'corchea', tempo: 240, repeticiones: 6, hastaLimpio: false });
 });
 
 test('profe: errores claros (sin clave, clave mala, sin saldo, saturada, rechazo) y sin gasto apuntado', () => {

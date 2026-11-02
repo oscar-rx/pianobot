@@ -120,7 +120,7 @@ try {
   comprobar(final.bien === plan.total - 2 && final.fallada === 1 && final.omitida === 1, `al acabar: ${final.bien} verdes, ${final.fallada} roja, ${final.omitida} naranja`);
   comprobar(!(await pagina.evaluate(() => window.pianobot.metronomo.sonando)), 'al acabar el fragmento se para el metrónomo');
   const resumen = await pagina.textContent('#intento-resumen');
-  comprobar(resumen.includes(`${plan.total - 2} de ${plan.total} bien`) && resumen.includes('al tempo, a 120 ppm'), `resumen: ${resumen}`);
+  comprobar(resumen.includes(`${plan.total - 2} de ${plan.total} bien`) && resumen.includes('al tempo, ♩ = 120'), `resumen: ${resumen}`);
   const desaj = await pagina.evaluate(() => window.pianobot.ultimoIntento.total.desajusteMs);
   comprobar(desaj >= 5 && desaj <= 40, `desajuste respecto al metrónomo ≈ +15 ms (${desaj})`);
   comprobar((await pagina.textContent('#al-tempo')).includes('Al tempo'), 'el botón vuelve a «⏱ Al tempo»');

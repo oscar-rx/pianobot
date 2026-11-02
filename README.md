@@ -21,21 +21,27 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   tecla) y pedal (aparte: % del compás pisado y veces que se pisa). Mientras tocas, el cursor sigue por dónde vas.
   Se queda esperando el siguiente intento.
 - **🧑‍🏫 Profe (fase 4):** Claude decide qué practicar. Dice la indicación en el panel («El 11 se te atasca en el
-  salto. Solo el 11, mano derecha»), la app pone sola el fragmento, la mano y el tempo y arranca los intentos al tempo
-  las veces que pida; al acabarlas le manda los resultados y decide el siguiente paso. Botones para contestarle (Otra
+  salto. Solo el 11, mano derecha»), la app pone sola el fragmento y la mano y arranca los intentos en uno de dos
+  modos: **sin metrónomo** (como Corregir, para aprender las notas: lo nuevo empieza así) o **con metrónomo** (al
+  tempo, con la figura del pulso que diga: «♪ = 60» antes que «♩ = 30»). Repite las veces que pida o, con «hasta que
+  salga limpio», sin límite hasta una vez sin fallos ni saltos; entonces le manda los resultados (los 6 últimos y
+  cuántas veces van) y decide el siguiente paso. Botones para contestarle (Otra
   vez, Más lento, Más rápido, Siguiente, Para) y un cuadro para decirle algo. Se elige el modelo: Haiku 5.5 (rápido,
   ~0,0004 $ por indicación), Sonnet 5.5 (~0,008 $) u Opus 5.5 (~0,015 $). Cada llamada suma en el contador de gasto
   y queda apuntada en las pestañas «Gasto» e «Intentos» del Sheet.
 - **⏱ Al tempo:** con el metrónomo. Al pulsarlo da un compás de cuenta y después la línea roja avanza sola y de forma continua al tempo (también en los silencios);
   cada nota se juzga en su momento: verde si la aciertas, rojo si tocas otra, naranja si se te pasa. Al acabar el
   fragmento se para el metrónomo y sale el resumen (desajuste respecto al metrónomo). El tempo, en el metrónomo de
-  arriba.
+  arriba. Una nota vale si cae más cerca de su sitio que del de la vecina (entre 120 y 350 ms de margen), y si vas
+  siempre un poco tarde (o pronto) la app lo descuenta al juzgar (hasta 150 ms), aunque el desajuste se sigue midiendo.
+- **Figura del pulso:** cada clic del metrónomo puede ser negra, corchea o semicorchea (selector «Cada clic es» o
+  tocando la figura ♩/♪/♬ del metrónomo de arriba). Para ir lento se sigue mejor «♪ = 60» que «♩ = 30».
 - **Seguimiento en directo:** mientras tocas con «Corregir», una línea roja sigue la nota por la que vas, las notas se
   colorean al momento (verde bien, rojo fallada, naranja saltada) y la hoja baja sola al pasar de sistema.
 - **Vista «una línea» (por defecto) o «páginas»** (botón ➡ / ☰): en «una línea» el fragmento va en un solo pentagrama
   que se desplaza en horizontal compás a compás, con el compás que tocas siempre a la izquierda y los siguientes a
   la vista; en «páginas», cada compás nuevo deja su línea arriba y la siguiente asoma debajo antes de llegar.
-- **Controles arriba:** Digitar, Corregir, mano, compás y un metrónomo mínimo (− tempo + ▶) encima de la partitura,
+- **Controles arriba:** Digitar, Corregir, mano, compás y un metrónomo mínimo (− ♩ = tempo + ▶) encima de la partitura,
   que tiene su propio scroll; no hace falta bajar la página para llegar a ellos.
 - **Digitación en la tablet:** botón **✍️ Digitar**, tocas una nota y eliges el dedo (1-5, o ✕ para quitarlo); salta
   sola a la siguiente nota de esa mano, así que un pasaje se digita pulsando números seguidos. Se guarda en el propio

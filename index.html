@@ -67,7 +67,8 @@
         </div>
         <div class="grupo mini-metro" role="group" aria-label="Metrónomo">
           <button type="button" class="paso" id="mini-menos" aria-label="Bajar tempo">−</button>
-          <span class="etiqueta"><b id="mini-tempo">60</b> ppm</span>
+          <button type="button" class="paso figura" id="mini-figura" aria-label="Figura del pulso" title="Qué figura marca cada clic (negra, corchea o semicorchea)">♩</button>
+          <span class="etiqueta">= <b id="mini-tempo">60</b></span>
           <button type="button" class="paso" id="mini-mas" aria-label="Subir tempo">+</button>
           <button type="button" class="paso mini-boton" id="mini-metro" aria-label="Metrónomo" aria-pressed="false">♩ ▶</button>
         </div>
@@ -149,17 +150,24 @@
       <h2 id="t-metro">Metrónomo</h2>
       <div class="tempo">
         <button type="button" class="redondo" id="tempo-menos" aria-label="Bajar tempo">−</button>
-        <div class="tempo-valor"><b id="tempo-numero">60</b><span>ppm</span></div>
+        <div class="tempo-valor"><b><span id="tempo-figura">♩</span> = <span id="tempo-numero">60</span></b><span id="tempo-unidad">negras por minuto</span></div>
         <button type="button" class="redondo" id="tempo-mas" aria-label="Subir tempo">+</button>
       </div>
       <input type="range" id="tempo" min="30" max="160" step="1" aria-label="Tempo">
       <div class="pulsos" id="pulsos" aria-hidden="true"></div>
       <div class="ajustes-metro">
+        <label class="control"><span>Cada clic es</span>
+          <select id="pulso">
+            <option value="negra">♩ negra</option>
+            <option value="corchea">♪ corchea</option>
+            <option value="semicorchea">♬ semicorchea</option>
+          </select>
+        </label>
         <label class="control"><span>Compás</span>
           <select id="compas">
-            <option value="2">2 pulsos</option>
-            <option value="3">3 pulsos</option>
-            <option value="4">4 pulsos</option>
+            <option value="2">2/4</option>
+            <option value="3">3/4</option>
+            <option value="4">4/4</option>
           </select>
         </label>
         <label class="control"><span>Medir contra</span>

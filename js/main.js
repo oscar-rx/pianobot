@@ -2,7 +2,7 @@
 // la prueba de escala y el gasto.
 
 import { activarAudio, ahoraSonando, contextoAudio } from './audio.js';
-import { Metronomo, SONIDOS } from './metronomo.js';
+import { Metronomo, SONIDOS, PULSOS } from './metronomo.js';
 import { EntradaMidi } from './entradas/midi.js';
 import { nombreNota, nombreIngles } from './notas.js';
 import { PruebaEscala, ESCALAS } from './prueba-escala.js';
@@ -20,8 +20,9 @@ const $ = (id) => document.getElementById(id);
 // ---------- Ajustes guardados ----------
 const CLAVE_AJUSTES = 'pianobot.ajustes';
 const ajustes = {
-  ppm: 60,
-  compas: 4,
+  ppm: 60, // clics por minuto
+  pulso: 'negra', // figura de cada clic: negra, corchea o semicorchea
+  compas: 4, // negras por compás
   subdivision: 1,
   volumen: 0.7,
   sonido: 'madera',
@@ -52,7 +53,12 @@ const guardar = () => {
 // ---------- Estado ----------
 const metronomo = new Metronomo();
 metronomo.ppm = ajustes.ppm;
-metronomo.pulsosPorCompas = ajustes.compas;
+metronomo.pulso = PULSOS[ajustes.pulso] ? ajustes.pulso : 'negra';
+/** Clics por compás: las negras del compás entre lo que dura cada clic. */
+const ponerCompas = () => {
+  metronomo.pulsosPorCompas = Math.max(1, Math.round(ajustes.compas / metronomo.unidad));
+};
+ponerCompas();
 metronomo.volumen = ajustes.volumen;
 metronomo.sonido = SONIDOS[ajustes.sonido] ? ajustes.sonido : 'madera';
 
@@ -291,16 +297,24 @@ function pintarEscala() {
 }
 
 // ---------- Metrónomo ----------
+/** «♪ = 60»: la figura de cada clic y cuántos por minuto. */
+const textoTempo = (pulso, ppm) => `${PULSOS[pulso]?.simbolo ?? '♩'} = ${ppm}`;
+
 function pintarMetronomo() {
+  const figura = PULSOS[metronomo.pulso];
   $('tempo-numero').textContent = metronomo.ppm;
+  $('tempo-figura').textContent = figura.simbolo;
+  $('tempo-unidad').textContent = `${figura.nombre}s por minuto`;
+  $('mini-figura').textContent = figura.simbolo;
+  $('pulso').value = metronomo.pulso;
   $('tempo').value = metronomo.ppm;
-  $('compas').value = metronomo.pulsosPorCompas;
+  $('compas').value = ajustes.compas;
   $('subdivision').value = ajustes.subdivision;
   $('volumen').value = metronomo.volumen;
   $('sonido').value = metronomo.sonido;
   $('metro-boton').textContent = metronomo.sonando ? '■ Parar' : '▶ Arrancar';
   $('mini-tempo').textContent = metronomo.ppm;
-  $('mini-metro').textContent = metronomo.sonando ? '♩ ■' : '♩ ▶';
+  $('mini-metro').textContent = metronomo.sonando ? '■' : '▶';
   $('mini-metro').setAttribute('aria-pressed', String(metronomo.sonando));
   const puntos = [];
   for (let i = 0; i < metronomo.pulsosPorCompas; i++) {
@@ -321,6 +335,17 @@ const cambiarTempo = (ppm) => {
     metronomo.arrancar();
   }
 };
+const cambiarPulso = (pulso) => {
+  metronomo.ponerPulso(pulso);
+  ajustes.pulso = metronomo.pulso;
+  ponerCompas();
+  guardar();
+  if (metronomo.sonando) {
+    metronomo.parar();
+    metronomo.arrancar();
+  }
+  pintarMetronomo();
+};
 const bajarTempo = () => cambiarTempo(metronomo.ppm - (metronomo.ppm > 100 ? 4 : 2));
 const subirTempo = () => cambiarTempo(metronomo.ppm + (metronomo.ppm >= 100 ? 4 : 2));
 $('tempo-menos').addEventListener('click', bajarTempo);
@@ -328,6 +353,12 @@ $('tempo-mas').addEventListener('click', subirTempo);
 // El mismo metrónomo, en pequeño, en la barra de la partitura
 $('mini-menos').addEventListener('click', bajarTempo);
 $('mini-mas').addEventListener('click', subirTempo);
+$('pulso').addEventListener('change', () => cambiarPulso($('pulso').value));
+// En la barra: tocar la figura la cambia (♩ → ♪ → ♬ → ♩)
+$('mini-figura').addEventListener('click', () => {
+  const figuras = Object.keys(PULSOS);
+  cambiarPulso(figuras[(figuras.indexOf(metronomo.pulso) + 1) % figuras.length]);
+});
 $('mini-metro').addEventListener('click', async () => {
   await activarAudio();
   if (metronomo.sonando) metronomo.parar();
@@ -338,8 +369,8 @@ $('tempo').addEventListener('input', () => {
 });
 $('tempo').addEventListener('change', () => cambiarTempo(+$('tempo').value));
 $('compas').addEventListener('change', () => {
-  metronomo.pulsosPorCompas = +$('compas').value;
-  ajustes.compas = metronomo.pulsosPorCompas;
+  ajustes.compas = +$('compas').value;
+  ponerCompas();
   guardar();
   pintarMetronomo();
 });
@@ -904,9 +935,9 @@ function seguirIntento() {
 grabador.addEventListener('intento', (e) => {
   const esperadas = esperadasDelIntento ?? esperadasDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano });
   const compases = compasesDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta });
-  const pulso = metronomo.sonando && metronomo.pulsos.length ? { ppm: metronomo.ppm, origen: metronomo.pulsos[0].tiempo } : null;
+  const pulso = metronomo.sonando && metronomo.pulsos.length ? { ppm: metronomo.negrasPorMinuto, origen: metronomo.pulsos[0].tiempo } : null;
   const resultado = analizar({ esperadas, compases, tocadas: e.detail.notas, pedal: e.detail.pedal, metronomo: pulso });
-  ultimoIntento = { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, metronomo: pulso?.ppm ?? null, ...resultado };
+  ultimoIntento = { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, metronomo: pulso ? textoTempo(metronomo.pulso, metronomo.ppm) : null, modo: 'corregir', ...resultado };
   esperadasDelIntento = null;
   pintarIntento(ultimoIntento);
   clearTimeout(seguimientoPendiente);
@@ -915,6 +946,7 @@ grabador.addEventListener('intento', (e) => {
   partitura.pintarEstados((gn) => resultado.notas.get(claveOsmd(gn.sourceNote))?.estado);
   partitura.irACompas(partitura.desde);
   estadoPartitura('Corregido. Toca otra vez cuando quieras.');
+  if (profe.activo && profe.instruccion?.modo === 'notas') repeticionTerminada(ultimoIntento);
 });
 
 // ---------- Al tempo ----------
@@ -939,16 +971,19 @@ async function empezarAlTempo() {
   const esperadas = esperadasDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano });
   const compases = compasesDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta });
   const duracion = compases.reduce((s, c) => s + c.duracion, 0);
-  const tiempos = Math.max(1, Math.round(compases[0]?.duracion ?? 4));
+  // Clics del compás de cuenta: las negras del primer compás entre lo que dura cada clic (♪ en 3/4 → 6)
+  const tiempos = Math.max(1, Math.round((compases[0]?.duracion ?? 4) / metronomo.unidad));
   // El metrónomo arranca de cero: su primer clic abre el compás de cuenta
   metronomo.parar();
   metronomo.pulsosPorCompas = tiempos;
   metronomo.arrancar();
-  const negra = 60 / metronomo.ppm;
-  const t0 = metronomo.pulsos[0].tiempo + tiempos * negra;
+  const negra = metronomo.segundosPorNegra;
+  const t0 = metronomo.pulsos[0].tiempo + tiempos * (60 / metronomo.ppm);
   practica = new PracticaAlTempo({ esperadas, t0, negra, duracion });
   practica.compases = compases;
   practica.tiempos = tiempos;
+  practica.unidad = metronomo.unidad;
+  practica.tempoTexto = textoTempo(metronomo.pulso, metronomo.ppm);
   estadosAlTempo = new Map();
   limpiarMarcas();
   ajustarHoja();
@@ -971,7 +1006,7 @@ function bucleAlTempo() {
   const ahora = ahoraSonando();
   const pos = practica.posicion(ahora);
   if (pos < 0) {
-    const n = Math.min(practica.tiempos, Math.floor(pos + practica.tiempos) + 1);
+    const n = Math.min(practica.tiempos, Math.floor(pos / practica.unidad + practica.tiempos) + 1);
     estadoPartitura(`Cuenta: ${'●'.repeat(Math.max(0, n))}${'○'.repeat(Math.max(0, practica.tiempos - n))} · empieza en el siguiente compás`);
     partitura.moverCabezal(inicioFragmento());
   } else {
@@ -992,7 +1027,7 @@ function terminarAlTempo() {
   const p = practica;
   pararAlTempo();
   const r = p.resumen(p.compases);
-  ultimoIntento = { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, metronomo: r.total.tempo, modo: 'al tempo', ...r };
+  ultimoIntento = { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, metronomo: p.tempoTexto, modo: 'al tempo', ...r };
   pintarIntento(ultimoIntento);
   partitura.pintarEstados((gn) => r.notas.get(claveOsmd(gn.sourceNote))?.estado);
   partitura.irACompas(partitura.desde);
@@ -1018,9 +1053,14 @@ $('al-tempo').addEventListener('click', () => {
 });
 
 // ---------- El profe (fase 4) ----------
-// El profe (Claude, a través del Apps Script) dice qué tocar; la app pone el fragmento, la mano y el tempo y
-// arranca los intentos «al tempo» las veces que pida. Al acabarlas, le manda los resultados y decide el siguiente paso.
+// El profe (Claude, a través del Apps Script) dice qué tocar; la app pone el fragmento, la mano y el modo:
+//   · «notas»: sin metrónomo, como Corregir (tocas a tu aire y al parar se corrige);
+//   · «metronomo»: al tempo, con la figura del pulso y el tempo que diga.
+// Repite las veces que pida o, con «hasta que salga limpio», sin límite hasta una vez sin fallos ni saltos.
+// Entonces le manda los resultados y decide el siguiente paso.
 const profe = { activo: false, sesion: null, inicio: 0, instruccion: null, rep: 0, intentos: [], historial: [], notas: [], esperando: false, temporizador: null };
+const INTENTOS_AL_PROFE = 6; // se le mandan los últimos (y cuántos van en total)
+const limpio = (u) => u.total.falladas === 0 && u.total.omitidas === 0;
 const nombreManoProfe = { ambas: 'las dos manos', derecha: 'mano derecha', izquierda: 'mano izquierda' };
 
 $('modelo-profe').value = ajustes.modeloProfe;
@@ -1041,8 +1081,38 @@ function pintarPlanProfe() {
     return;
   }
   const compases = i.desde === i.hasta ? `Compás ${i.desde}` : `Compases ${i.desde}–${i.hasta}`;
-  const vez = Math.min(profe.rep + 1, i.repeticiones);
-  $('profe-plan').textContent = `${compases} · ${nombreManoProfe[i.mano]} · ${i.tempo} ppm · vez ${vez} de ${i.repeticiones}`;
+  const modo = i.modo === 'notas' ? 'sin metrónomo' : textoTempo(i.pulso, i.tempo);
+  const veces = i.hastaLimpio ? `vez ${profe.rep + 1} · hasta que salga limpio` : `vez ${Math.min(profe.rep + 1, i.repeticiones)} de ${i.repeticiones}`;
+  $('profe-plan').textContent = `${compases} · ${nombreManoProfe[i.mano]} · ${modo} · ${veces}`;
+  // Sin metrónomo, «más lento/rápido» no tiene sentido
+  for (const b of document.querySelectorAll('[data-orden="mas-lento"], [data-orden="mas-rapido"]')) b.hidden = i.modo === 'notas';
+}
+
+/** Para el modo en que esté (al tempo o corregir) sin tocar el estado del profe. */
+function pararPractica() {
+  if (practica) pararAlTempo();
+  if (grabador.activo) {
+    grabador.activar(false);
+    $('corregir').setAttribute('aria-pressed', 'false');
+  }
+}
+
+/** Figura más corta de cada tramo de compases (en negras: 1 negra, ½ corchea, ¼ semicorchea…). */
+function figurasPorCompas() {
+  const nombre = (d) => (d >= 1 ? 'negra o más' : d >= 0.5 ? 'corchea' : d >= 0.25 ? 'semicorchea' : 'fusa');
+  const porCompas = new Map();
+  for (const n of dig.indice.notas) {
+    if (n.continuacion || !(n.duracion > 0)) continue;
+    porCompas.set(n.compasNumero, Math.min(porCompas.get(n.compasNumero) ?? Infinity, n.duracion));
+  }
+  const tramos = [];
+  for (const [compas, d] of [...porCompas].sort((a, b) => a[0] - b[0])) {
+    const f = nombre(d);
+    const ultimo = tramos.at(-1);
+    if (ultimo && ultimo.figura === f && ultimo.hasta === compas - 1) ultimo.hasta = compas;
+    else tramos.push({ desde: compas, hasta: compas, figura: f });
+  }
+  return tramos.map((t) => `${t.desde === t.hasta ? t.desde : `${t.desde}-${t.hasta}`}: ${t.figura}`).join(' · ');
 }
 
 async function empezarProfe() {
@@ -1056,7 +1126,7 @@ async function empezarProfe() {
   }
   if (dig.activo) activarDigitacion(false);
   if (grabador.activo) await activarCorreccion(false);
-  if (practica) pararAlTempo();
+  pararPractica();
   await activarAudio();
   if (!entrada) await empezar();
   Object.assign(profe, {
@@ -1077,7 +1147,7 @@ async function empezarProfe() {
 
 function terminarProfe(despedida) {
   clearTimeout(profe.temporizador);
-  if (practica) pararAlTempo();
+  pararPractica();
   profe.activo = false;
   profe.instruccion = null;
   $('profe').setAttribute('aria-pressed', 'false');
@@ -1097,7 +1167,9 @@ function compactarIntento(u) {
     desde: u.desde,
     hasta: u.hasta,
     mano: u.mano,
-    tempo: u.total.tempo,
+    modo: u.modo === 'al tempo' ? 'metronomo' : 'notas',
+    metronomo: u.metronomo, // «♪ = 60», o null si no sonaba
+    tempo: u.total.tempo, // en negras por minuto
     total: (({ notas, bien, falladas, omitidas, titubeos, desajusteMs, desajusteAbsMs }) => ({ notas, bien, falladas, omitidas, titubeos, desajusteMs, desajusteAbsMs }))(u.total),
     filas: u.filas.map(({ compas, mano, notas, bien, falladas, omitidas, desajusteMs, articulacion }) => ({ compas, mano, notas, bien, falladas, omitidas, desajusteMs, articulacion })),
     pedal: u.pedal,
@@ -1107,7 +1179,7 @@ function compactarIntento(u) {
 async function pedirAlProfe(comentario = null) {
   if (!profe.activo || profe.esperando) return;
   clearTimeout(profe.temporizador);
-  if (practica) pararAlTempo();
+  pararPractica();
   profe.esperando = true;
   decirProfe('El profe está pensando…', { pensando: true });
   for (const b of document.querySelectorAll('.profe-botones button')) b.disabled = true;
@@ -1121,9 +1193,19 @@ async function pedirAlProfe(comentario = null) {
       compases: partitura.numCompases,
       compas: piezaActual.compas,
       tempoObjetivo: piezaActual.tempoObjetivo,
+      figuraMasCorta: figurasPorCompas(),
     },
-    ahora: { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, tempo: metronomo.ppm },
-    intentos: profe.intentos,
+    ahora: {
+      desde: partitura.desde,
+      hasta: partitura.hasta,
+      mano: ajustes.mano,
+      modo: profe.instruccion?.modo ?? null,
+      pulso: metronomo.pulso,
+      tempo: metronomo.ppm,
+    },
+    intentos: profe.intentos.slice(-INTENTOS_AL_PROFE),
+    vecesTotal: profe.intentos.length,
+    vecesLimpias: profe.intentos.filter(limpio).length,
     historial: profe.historial,
     comentario: comentarios.length ? comentarios.join(' · ') : null,
     minutos: Math.round((Date.now() - profe.inicio) / 60000),
@@ -1136,7 +1218,8 @@ async function pedirAlProfe(comentario = null) {
         desde: peticion.ahora.desde,
         hasta: peticion.ahora.hasta,
         mano: peticion.ahora.mano,
-        tempo: peticion.ahora.tempo,
+        modo: peticion.ahora.modo,
+        tempo: peticion.ahora.modo === 'notas' ? null : textoTempo(peticion.ahora.pulso, peticion.ahora.tempo),
         resultados: profe.intentos.map((it) => `${it.total.bien}/${it.total.notas}`),
         comentario: peticion.comentario,
         decision: r.instruccion.decir,
@@ -1170,26 +1253,49 @@ function aplicarInstruccion(i) {
   $('profe-siguiente').textContent = '→ Siguiente';
   ajustes.mano = i.mano;
   $('mano').value = i.mano;
-  cambiarTempo(i.tempo);
+  if (i.modo === 'notas') metronomo.parar();
+  else {
+    metronomo.ponerPulso(i.pulso);
+    ajustes.pulso = metronomo.pulso;
+    cambiarTempo(i.tempo);
+    pintarMetronomo();
+  }
   if (i.desde !== partitura.desde || i.hasta !== partitura.hasta) verFragmento(i.desde, i.hasta);
   else guardar();
   empezarRepeticion(2500);
 }
 
-/** Arranca la siguiente vez al tempo tras un momento (para leer la indicación y poner las manos). */
+/** Prepara la siguiente vez tras un momento (para leer la indicación y poner las manos). */
 function empezarRepeticion(espera) {
   clearTimeout(profe.temporizador);
   pintarPlanProfe();
-  profe.temporizador = setTimeout(() => {
-    if (profe.activo && !practica && !profe.esperando) empezarAlTempo();
+  profe.temporizador = setTimeout(async () => {
+    if (!profe.activo || profe.esperando) return;
+    if (profe.instruccion?.modo === 'notas') {
+      // Sin metrónomo: se escucha como en Corregir; al parar unos segundos, se corrige y cuenta como una vez
+      if (practica) pararAlTempo();
+      if (!grabador.activo) await activarCorreccion(true);
+      if (grabador.activo) estadoPartitura(`Sin metrónomo, a tu aire: toca los compases ${partitura.desde}–${partitura.hasta}${textoMano()}.`);
+    } else if (!practica) {
+      if (grabador.activo) {
+        grabador.activar(false);
+        $('corregir').setAttribute('aria-pressed', 'false');
+      }
+      empezarAlTempo();
+    }
   }, espera);
 }
 
 function repeticionTerminada(intento) {
+  const i = profe.instruccion;
+  if (!i) return;
   profe.intentos.push(compactarIntento(intento));
   profe.rep++;
-  if (profe.rep < profe.instruccion.repeticiones) empezarRepeticion(1500);
-  else pedirAlProfe();
+  const otra = i.hastaLimpio ? !limpio(intento) : profe.rep < i.repeticiones;
+  if (otra) {
+    if (i.hastaLimpio) decirProfe(`${i.decir} (Aún no: otra vez.)`);
+    empezarRepeticion(1500);
+  } else pedirAlProfe();
 }
 
 // Órdenes rápidas: las de tempo y «otra vez» las hace la app sola (sin gastar); se le cuentan al profe después.
@@ -1205,9 +1311,9 @@ function orden(cual) {
     return;
   }
   if (practica) pararAlTempo();
-  if (cual === 'mas-lento' || cual === 'mas-rapido') {
+  if ((cual === 'mas-lento' || cual === 'mas-rapido') && i.modo !== 'notas') {
     const nuevo = Math.max(20, Math.min(240, i.tempo + (cual === 'mas-lento' ? -8 : 8)));
-    profe.notas.push(`Ha pedido ir ${cual === 'mas-lento' ? 'más lento' : 'más rápido'} (${i.tempo} → ${nuevo} ppm).`);
+    profe.notas.push(`Ha pedido ir ${cual === 'mas-lento' ? 'más lento' : 'más rápido'} (${textoTempo(i.pulso, i.tempo)} → ${textoTempo(i.pulso, nuevo)}).`);
     i.tempo = nuevo;
     cambiarTempo(nuevo);
   } else {
@@ -1242,8 +1348,8 @@ function pintarIntento(r) {
   if (t.falladas) partes.push(`${t.falladas} fallada${t.falladas > 1 ? 's' : ''}`);
   if (t.omitidas) partes.push(`${t.omitidas} omitida${t.omitidas > 1 ? 's' : ''}`);
   if (t.titubeos) partes.push(`${t.titubeos} titubeo${t.titubeos > 1 ? 's' : ''}`);
-  if (r.modo === 'al tempo') partes.push(`al tempo, a ${t.tempo} ppm`);
-  else if (t.tempo) partes.push(`tempo ${t.tempo} ppm${r.metronomo ? ` (metrónomo a ${r.metronomo})` : ''}`);
+  if (r.modo === 'al tempo') partes.push(`al tempo, ${r.metronomo}`);
+  else if (t.tempo) partes.push(`tempo ♩ = ${t.tempo}${r.metronomo ? ` (metrónomo ${r.metronomo})` : ''}`);
   if (t.desajusteMs != null) partes.push(`desajuste medio ${conSigno(t.desajusteMs)} (±${t.desajusteAbsMs} ms, respecto ${t.referencia === 'metrónomo' ? 'al metrónomo' : 'a tu pulso'})`);
   $('intento-resumen').textContent = partes.join(' · ');
 
