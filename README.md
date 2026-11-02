@@ -3,10 +3,13 @@
 Profe de piano: la tablet escucha lo que tocas y te enseña el fragmento, y Claude decide qué practicar.
 Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
-**Estado:** fase 1, «Oír».
+**Estado:** fases 1 («Oír») y 2 («Ver») hechas.
 
 ## Qué hace ya
 
+- **Partitura en pantalla:** la Invención 13 pintada con OpenSheetMusicDisplay. Solo enseña los compases que
+  pidas («Compases 9 a 12»), con ◀ ▶ para pasar al fragmento anterior o siguiente, A− A+ para el tamaño y un
+  cursor que resalta el compás en el que vas (‹ ›). Recuerda el fragmento y el tamaño.
 - **Lee el piano por cable (MIDI por USB):** cada tecla por separado, con su momento, su fuerza (1-127) y cuánto
   la mantienes. Recoge acordes, las dos manos a la vez y el pedal.
 - **Nota grande:** enseña todas las teclas que suenan a la vez y avisa cuando pisas el pedal.
@@ -27,6 +30,7 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
    nombre del piano.
 3. Prueba de la fase 1: metrónomo a 60, «Medir contra: negras», escala de La menor armónica.
    Si sale «¡Entera!», el oído funciona.
+4. Prueba de la fase 2: escribe 9 y 12 en «Compases»; deben salir solo esos cuatro compases.
 
 La web se publica sola con GitHub Pages desde la rama `claude/jolly-lamport-ytnces`. Si después de un cambio la
 tablet enseña la versión antigua, cierra la pestaña y vuelve a abrirla.
@@ -41,6 +45,9 @@ js/main.js                  une todo
 js/audio.js                 reloj común: metrónomo y piano se miden en el mismo reloj
 js/metronomo.js             metrónomo programado con antelación (no se desfasa)
 js/entradas/midi.js         el piano por Web MIDI
+js/partitura.js             la partitura (fragmento y cursor) sobre OpenSheetMusicDisplay
+js/vendor/                  OpenSheetMusicDisplay 2.2.1 (licencia BSD-3), guardada aquí para no depender de un CDN
+piezas/                     catálogo (piezas.json) y MusicXML de las piezas de dominio público
 js/notas.js                 nombres de notas (Do4 = Do central)
 js/prueba-escala.js         la prueba de la fase 1
 js/gasto.js                 precios por modelo y contador de gasto
@@ -54,7 +61,7 @@ comparar con la partitura.
 
 ```bash
 npm test          # gasto y prueba de escala (Node 22)
-npm run e2e       # en Chrome con un piano MIDI simulado: acordes, fuerza, pedal y dos voces
+npm run e2e       # en Chrome: piano MIDI simulado (acordes, fuerza, pedal, dos voces) y partitura (fragmentos)
 npm run servir    # la app en http://localhost:8080
 ```
 

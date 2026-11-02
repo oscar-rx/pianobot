@@ -1,4 +1,5 @@
-// pianobot · fase 1: oír. Une el piano (MIDI), el metrónomo, el registro de notas, la prueba de escala y el gasto.
+// pianobot · fases 1 y 2: oír y ver. Une el piano (MIDI), la partitura, el metrónomo, el registro de notas,
+// la prueba de escala y el gasto.
 
 import { activarAudio, ahoraSonando, contextoAudio } from './audio.js';
 import { Metronomo, SONIDOS } from './metronomo.js';
@@ -6,6 +7,7 @@ import { EntradaMidi } from './entradas/midi.js';
 import { nombreNota, nombreIngles } from './notas.js';
 import { PruebaEscala, ESCALAS } from './prueba-escala.js';
 import { ContadorGasto, formatoDolares, mesDe } from './gasto.js';
+import { Partitura } from './partitura.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -19,6 +21,8 @@ const ajustes = {
   sonido: 'madera',
   escala: 'la-menor',
   retrasoMs: 0,
+  fragmento: { desde: 1, hasta: 4 },
+  zoom: 1,
 };
 try {
   const guardados = JSON.parse(localStorage.getItem(CLAVE_AJUSTES) || '{}');
@@ -386,7 +390,7 @@ $('gasto-tope').addEventListener('change', () => {
   gasto.tope = $('gasto-tope').value;
 });
 // Para que la fase 4 (y las pruebas) puedan apuntar llamadas: window.pianobot.gasto.registrar(modelo, usage)
-window.pianobot = { gasto, metronomo, get entrada() { return entrada; } };
+window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; } };
 
 // ---------- Bucle de dibujo: pulsos del metrónomo ----------
 function dibujar() {
@@ -404,9 +408,80 @@ function dibujar() {
   }
 }
 
+// ---------- Partitura ----------
+const partitura = new Partitura($('partitura'));
+partitura.zoom = ajustes.zoom;
+
+function pintarFragmento() {
+  $('frag-desde').value = partitura.desde;
+  $('frag-hasta').value = partitura.hasta;
+  $('frag-desde').max = $('frag-hasta').max = partitura.numCompases;
+  $('frag-anterior').disabled = partitura.desde <= 1;
+  $('frag-siguiente').disabled = partitura.hasta >= partitura.numCompases;
+}
+
+function verFragmento(desde, hasta) {
+  if (!partitura.osmd) return;
+  partitura.mostrar(desde, hasta);
+  ajustes.fragmento = { desde: partitura.desde, hasta: partitura.hasta };
+  guardar();
+  pintarFragmento();
+}
+
+partitura.addEventListener('compas', (e) => {
+  $('cursor-compas').textContent = e.detail.compas;
+  $('cursor-anterior').disabled = e.detail.compas <= partitura.desde;
+  $('cursor-siguiente').disabled = e.detail.compas >= partitura.hasta;
+});
+
+// Al cambiar un número, el otro se ajusta para que el fragmento siga teniendo sentido.
+$('frag-desde').addEventListener('change', () => {
+  const desde = +$('frag-desde').value || 1;
+  verFragmento(desde, Math.max(desde, partitura.hasta));
+});
+$('frag-hasta').addEventListener('change', () => {
+  const hasta = +$('frag-hasta').value || partitura.hasta;
+  verFragmento(Math.min(partitura.desde, hasta), hasta);
+});
+$('frag-anterior').addEventListener('click', () => {
+  const largo = partitura.hasta - partitura.desde + 1;
+  const desde = Math.max(1, partitura.desde - largo);
+  verFragmento(desde, desde + largo - 1);
+});
+$('frag-siguiente').addEventListener('click', () => {
+  const largo = partitura.hasta - partitura.desde + 1;
+  const hasta = Math.min(partitura.numCompases, partitura.hasta + largo);
+  verFragmento(hasta - largo + 1, hasta);
+});
+$('zoom-menos').addEventListener('click', () => cambiarZoom(-0.15));
+$('zoom-mas').addEventListener('click', () => cambiarZoom(0.15));
+function cambiarZoom(delta) {
+  partitura.ponerZoom(Math.round((partitura.zoom + delta) * 100) / 100);
+  ajustes.zoom = partitura.zoom;
+  guardar();
+}
+$('cursor-anterior').addEventListener('click', () => partitura.irACompas(partitura.compas - 1));
+$('cursor-siguiente').addEventListener('click', () => partitura.irACompas(partitura.compas + 1));
+
+async function cargarPartitura() {
+  try {
+    const piezas = await (await fetch('piezas/piezas.json')).json();
+    const pieza = piezas[0];
+    $('pieza-titulo').textContent = pieza.titulo;
+    $('pieza-autor').textContent = `· ${pieza.compositor}`;
+    await partitura.cargar(pieza.fichero);
+    verFragmento(ajustes.fragmento.desde, ajustes.fragmento.hasta);
+    $('partitura-estado').textContent = `${partitura.numCompases} compases`;
+  } catch (err) {
+    console.error(err);
+    $('partitura-estado').textContent = `No se ha podido cargar la partitura: ${err.message}`;
+  }
+}
+
 // ---------- Arranque ----------
 pintarMetronomo();
 pintarEscala();
 pintarGasto();
 requestAnimationFrame(dibujar);
 if (!window.isSecureContext) ponerEstado('Abre la app por https para poder usar el MIDI.', false);
+cargarPartitura();

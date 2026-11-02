@@ -11,7 +11,7 @@
 </head>
 <body>
   <header class="barra">
-    <div class="marca">pianobot <span class="fase">fase 1 · oír</span></div>
+    <div class="marca">pianobot <span class="fase">fase 2 · ver</span></div>
 
     <button type="button" id="gasto" class="gasto" title="Gasto de la API de Claude">
       <span class="gasto-etiqueta">API</span>
@@ -23,6 +23,32 @@
   <div id="aviso-gasto" class="aviso" hidden></div>
 
   <main class="rejilla">
+    <section class="tarjeta partitura" aria-labelledby="t-partitura">
+      <div class="cabecera">
+        <h2 id="t-partitura"><span id="pieza-titulo">Partitura</span> <span class="tenue" id="pieza-autor"></span></h2>
+        <div class="fragmento" role="group" aria-label="Fragmento">
+          <button type="button" class="paso" id="frag-anterior" aria-label="Fragmento anterior">◀</button>
+          <label>Compases
+            <input type="number" id="frag-desde" min="1" inputmode="numeric" aria-label="Desde el compás">
+            a
+            <input type="number" id="frag-hasta" min="1" inputmode="numeric" aria-label="Hasta el compás">
+          </label>
+          <button type="button" class="paso" id="frag-siguiente" aria-label="Fragmento siguiente">▶</button>
+        </div>
+        <div class="zoom" role="group" aria-label="Tamaño">
+          <button type="button" class="paso" id="zoom-menos" aria-label="Más pequeña">A−</button>
+          <button type="button" class="paso" id="zoom-mas" aria-label="Más grande">A+</button>
+        </div>
+      </div>
+      <div class="hoja" id="partitura" aria-label="Partitura"></div>
+      <div class="pie-partitura">
+        <button type="button" class="paso" id="cursor-anterior" aria-label="Compás anterior">‹</button>
+        <span>Compás <b id="cursor-compas">–</b></span>
+        <button type="button" class="paso" id="cursor-siguiente" aria-label="Compás siguiente">›</button>
+        <span class="tenue" id="partitura-estado">Cargando la partitura…</span>
+      </div>
+    </section>
+
     <section class="tarjeta ahora" aria-labelledby="t-ahora">
       <h2 id="t-ahora" class="oculto">Lo que suena</h2>
       <div class="fila-estado">
@@ -116,6 +142,7 @@
     </form>
   </dialog>
 
+  <script src="js/vendor/opensheetmusicdisplay.min.js" defer></script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
