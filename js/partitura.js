@@ -73,6 +73,43 @@ export class Partitura extends EventTarget {
     this.dispatchEvent(new CustomEvent('compas', { detail: { compas: numero } }));
   }
 
+  /** Vuelve a cargar la partitura (p. ej. con digitación nueva) sin perder fragmento ni cursor. */
+  async recargar(xml) {
+    const compas = this.compas;
+    await this.osmd.load(xml);
+    this.mostrar(this.desde, this.hasta);
+    this.irACompas(compas);
+  }
+
+  /** Todas las notas pintadas (GraphicalNote de OSMD). */
+  *notasPintadas() {
+    for (const fila of this.osmd.GraphicSheet.MeasureList) {
+      for (const compas of fila) {
+        if (!compas) continue;
+        for (const entrada of compas.staffEntries) {
+          for (const voz of entrada.graphicalVoiceEntries) yield* voz.notes;
+        }
+      }
+    }
+  }
+
+  /** La nota pintada más cercana a un punto de la pantalla (coordenadas de un evento), o null. */
+  notaEn(x, y) {
+    const OSMD = window.opensheetmusicdisplay;
+    const hoja = this.osmd.GraphicSheet;
+    const punto = hoja.svgToOsmd(hoja.domToSvg(new OSMD.PointF2D(x, y)));
+    // Margen de unas 3 × 5 unidades de OSMD (≈ 30 × 50 px a tamaño normal): basta con tocar cerca.
+    return hoja.GetNearestNote(punto, new OSMD.PointF2D(3, 5)) ?? null;
+  }
+
+  /** Marca en el SVG las notas que cumplan `elegir(nota)` con una clase CSS (quitándola de las demás). */
+  marcar(clase, elegir) {
+    for (const el of this.contenedor.querySelectorAll(`.${clase}`)) el.classList.remove(clase);
+    for (const nota of this.notasPintadas()) {
+      if (elegir(nota)) nota.getSVGGElement?.()?.classList.add(clase);
+    }
+  }
+
   /** Números de los compases que hay pintados ahora mismo (para comprobar el fragmento). */
   compasesPintados() {
     const numeros = new Set();

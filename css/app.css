@@ -145,6 +145,23 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 .campo { display: flex; flex-direction: column; gap: 4px; }
 .campo span { color: var(--tenue); font-size: 0.9rem; }
 .campo input { border: 1px solid var(--linea); border-radius: 10px; padding: 10px 12px; background: var(--tarjeta); min-height: 44px; width: 100%; }
+.digitar { min-height: 44px; padding: 8px 14px; }
+.digitar[aria-pressed='true'] { background: var(--acento); color: var(--acento-tinta); border-color: var(--acento); }
+.hoja.digitando { cursor: crosshair; }
+.paleta-dedos {
+  position: sticky; bottom: 8px; z-index: 2; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: 12px; background: var(--tarjeta); border: 1px solid var(--acento); box-shadow: var(--sombra);
+}
+.dig-nota { font-variant-numeric: tabular-nums; margin-right: auto; }
+.dedos { display: flex; gap: 8px; }
+.dedo {
+  width: 52px; height: 52px; border-radius: 12px; border: 1px solid var(--linea); background: var(--suave);
+  font: 600 1.4rem/1 var(--serif); cursor: pointer; touch-action: manipulation;
+}
+.dedo.actual { background: var(--acento); color: var(--acento-tinta); border-color: var(--acento); }
+.dedo:disabled { opacity: 0.4; }
+/* Nota elegida para digitar: en color sobre el papel claro */
+.hoja .nota-elegida path, .hoja .nota-elegida rect { fill: #c2412a; stroke: #c2412a; }
 .pie-partitura b { font-variant-numeric: tabular-nums; }
 .pie-partitura #partitura-estado { margin-left: auto; font-size: 0.85rem; }
 

@@ -12,6 +12,9 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   pidas («Compases 9 a 12»), con ◀ ▶ para pasar al fragmento anterior o siguiente, A− A+ para el tamaño y un
   cursor que resalta el compás en el que vas (‹ ›). Recuerda el fragmento y el tamaño, y guarda una copia de
   la partitura en la tablet: carga al instante y funciona aunque Google falle. Cada pieza recuerda su fragmento.
+- **Digitación en la tablet:** botón **✍️ Digitar**, tocas una nota y eliges el dedo (1-5, o ✕ para quitarlo); salta
+  sola a la siguiente nota de esa mano, así que un pasaje se digita pulsando números seguidos. Se guarda en el propio
+  MusicXML de Drive (se ve también en MuseScore); sin conexión queda en la tablet y se sube después.
 - **Lee el piano por cable (MIDI por USB):** cada tecla por separado, con su momento, su fuerza (1-127) y cuánto
   la mantienes. Recoge acordes, las dos manos a la vez y el pedal.
 - **Nota grande:** enseña todas las teclas que suenan a la vez y avisa cuando pisas el pedal.
@@ -50,6 +53,7 @@ js/audio.js                 reloj común: metrónomo y piano se miden en el mism
 js/metronomo.js             metrónomo programado con antelación (no se desfasa)
 js/entradas/midi.js         el piano por Web MIDI
 js/partitura.js             la partitura (fragmento y cursor) sobre OpenSheetMusicDisplay
+js/digitacion.js            empareja las notas pintadas con las del MusicXML y escribe <fingering>
 js/vendor/                  OpenSheetMusicDisplay 2.2.1 (licencia BSD-3), guardada aquí para no depender de un CDN
 js/servidor.js              conexión con el Apps Script y copia local (catálogo y partituras)
 apps-script/                el Apps Script: el puente con Google Drive y el Sheet «pianobot»
@@ -66,7 +70,7 @@ comparar con la partitura.
 
 ```bash
 npm test          # gasto, prueba de escala y Apps Script con Google simulado (Node 22)
-npm run e2e       # en Chrome: piano MIDI simulado (acordes, fuerza, pedal, dos voces) y partitura (fragmentos)
+npm run e2e       # en Chrome: piano MIDI simulado, partitura (fragmentos, piezas, subida) y digitación
 npm run servir    # la app en http://localhost:8080
 ```
 

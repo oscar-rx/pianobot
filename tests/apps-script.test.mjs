@@ -81,7 +81,14 @@ function entorno({ token = 'secreto', ficheros = {} } = {}) {
     return id;
   };
   for (const [nombre, contenido] of Object.entries(ficheros)) meter(nombre, contenido);
-  const fichero = (id) => ({ getId: () => id, getName: () => drive.get(id).nombre, getBlob: () => new Blob(drive.get(id).nombre, drive.get(id).bytes) });
+  const papelera = new Set();
+  const fichero = (id) => ({
+    getId: () => id,
+    getName: () => drive.get(id).nombre,
+    getBlob: () => new Blob(drive.get(id).nombre, drive.get(id).bytes),
+    setContent: (texto) => { drive.get(id).bytes = Buffer.from(texto); },
+    setTrashed: () => { papelera.add(id); drive.delete(id); },
+  });
   const iterador = (lista) => ({ hasNext: () => lista.length > 0, next: () => lista.shift() });
 
   let filas = [['ID', 'Título', 'Compositor', 'Catálogo']]; // cabecera antigua: el script debe rehacerla
@@ -93,6 +100,7 @@ function entorno({ token = 'secreto', ficheros = {} } = {}) {
         valores.forEach((v, i) => { filas[fila - 1 + i] = [...v]; });
         return { setFontWeight() {} };
       },
+      setValue: (v) => { filas[fila - 1][col - 1] = v; },
     }),
     appendRow: (fila) => filas.push(fila.map((v) => (typeof v === 'string' && v.startsWith("'") ? v.slice(1) : v))),
     setFrozenRows() {},
@@ -107,7 +115,8 @@ function entorno({ token = 'secreto', ficheros = {} } = {}) {
         getName: () => 'piezas',
         getFiles: () => iterador([...drive.keys()].map(fichero)),
         getFilesByName: (n) => iterador([...drive.keys()].filter((id) => drive.get(id).nombre === n).map(fichero)),
-        createFile: (blob) => fichero(meter(blob.getName(), blob.bytes)),
+        createFile: (blobONombre, contenido) =>
+          fichero(typeof blobONombre === 'string' ? meter(blobONombre, contenido) : meter(blobONombre.getName(), blobONombre.bytes)),
       }),
     },
     Utilities: {
@@ -123,7 +132,7 @@ function entorno({ token = 'secreto', ficheros = {} } = {}) {
   vm.runInContext(codigo, ctx);
   const llamar = (parametros) => JSON.parse(ctx.doGet({ parameter: parametros }).texto);
   const enviar = (cuerpo) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(cuerpo) } }).texto);
-  return { ctx, llamar, enviar, propiedades, registro, filas: () => filas, drive };
+  return { ctx, llamar, enviar, propiedades, registro, filas: () => filas, drive, papelera };
 }
 
 test('sin token o con uno incorrecto no da nada', () => {
@@ -207,4 +216,41 @@ test('errores claros', () => {
   const { llamar } = entorno();
   assert.match(llamar({ accion: 'pieza', id: 'nada', token: 'secreto' }).error, /No encuentro la pieza/);
   assert.match(llamar({ accion: 'otra', token: 'secreto' }).error, /Acción desconocida/);
+});
+
+test('guardar: sobrescribe la partitura (p. ej. con digitación) y la siguiente lectura la trae', () => {
+  const { enviar, llamar, drive } = entorno({ ficheros: { 'bwv784.musicxml': XML() } });
+  llamar({ accion: 'piezas', token: 'secreto' });
+  const conDedos = XML().replace('<measure number="2">', '<measure number="2"><!-- dedo 3 -->');
+  const { pieza } = enviar({ accion: 'guardar', token: 'secreto', id: 'bwv784', musicxml: conDedos });
+  assert.equal(pieza.id, 'bwv784');
+  assert.equal(drive.size, 1);
+  assert.equal(llamar({ accion: 'pieza', id: 'bwv784', token: 'secreto' }).musicxml, conDedos);
+});
+
+test('guardar: si no es un MusicXML completo, no toca nada', () => {
+  const { enviar, llamar } = entorno({ ficheros: { 'bwv784.musicxml': XML() } });
+  llamar({ accion: 'piezas', token: 'secreto' });
+  const cortado = XML().slice(0, 200);
+  assert.match(enviar({ accion: 'guardar', token: 'secreto', id: 'bwv784', musicxml: cortado }).error, /no es una partitura/);
+  assert.match(enviar({ accion: 'guardar', token: 'secreto', id: 'bwv784', musicxml: '' }).error, /no es una partitura/);
+  assert.equal(llamar({ accion: 'pieza', id: 'bwv784', token: 'secreto' }).musicxml, XML());
+});
+
+test('guardar un .mxl: queda como .musicxml, la fila apunta al nuevo y el .mxl va a la papelera', () => {
+  const mxl = crearZip({
+    'META-INF/container.xml': '<container><rootfiles><rootfile full-path="p.xml"/></rootfiles></container>',
+    'p.xml': XML('Comprimida'),
+  });
+  const { enviar, llamar, filas, papelera } = entorno({ ficheros: { 'comprimida.mxl': mxl } });
+  llamar({ accion: 'piezas', token: 'secreto' });
+  const nuevo = XML('Comprimida con dedos');
+  const { pieza } = enviar({ accion: 'guardar', token: 'secreto', id: 'comprimida', musicxml: nuevo });
+  assert.equal(pieza.fichero, 'comprimida.musicxml');
+  assert.deepEqual([...papelera], ['drive1']);
+  assert.equal(filas()[1][3], 'comprimida.musicxml');
+  const { piezas } = llamar({ accion: 'piezas', token: 'secreto' });
+  assert.equal(piezas.length, 1, 'no se duplica en el catálogo');
+  assert.equal(piezas[0].id, 'comprimida', 'conserva su ID (y con él su progreso)');
+  assert.equal(llamar({ accion: 'pieza', id: 'comprimida', token: 'secreto' }).musicxml, nuevo);
 });

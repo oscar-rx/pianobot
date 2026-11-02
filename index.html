@@ -53,10 +53,22 @@
         <button type="button" class="primario" id="conectar">Conectar con Drive</button>
       </div>
       <div class="hoja" id="partitura" aria-label="Partitura"></div>
+      <div class="paleta-dedos" id="paleta-dedos" hidden>
+        <span class="dig-nota" id="dig-nota" aria-live="polite">Toca una nota</span>
+        <div class="dedos" role="group" aria-label="Dedo">
+          <button type="button" class="dedo" data-dedo="1">1</button>
+          <button type="button" class="dedo" data-dedo="2">2</button>
+          <button type="button" class="dedo" data-dedo="3">3</button>
+          <button type="button" class="dedo" data-dedo="4">4</button>
+          <button type="button" class="dedo" data-dedo="5">5</button>
+          <button type="button" class="dedo borrar" data-dedo="" aria-label="Quitar el dedo">✕</button>
+        </div>
+      </div>
       <div class="pie-partitura">
         <button type="button" class="paso" id="cursor-anterior" aria-label="Compás anterior">‹</button>
         <span>Compás <b id="cursor-compas">–</b></span>
         <button type="button" class="paso" id="cursor-siguiente" aria-label="Compás siguiente">›</button>
+        <button type="button" class="secundario digitar" id="digitar" aria-pressed="false">✍️ Digitar</button>
         <span class="tenue" id="partitura-estado">Cargando la partitura…</span>
       </div>
     </section>

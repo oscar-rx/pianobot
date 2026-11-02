@@ -1,8 +1,11 @@
 # Apps Script de pianobot
 
 El puente entre la web (GitHub Pages) y tu Google Drive. Va pegado al Sheet «pianobot» y se publica como
-aplicación web. Ahora mismo sirve el catálogo de piezas y las partituras y recibe las que subes desde la app;
-en la fase 4 llamará a Claude.
+aplicación web. Ahora mismo sirve el catálogo de piezas y las partituras, recibe las que subes desde la app y
+guarda los cambios (la digitación); en la fase 4 llamará a Claude.
+
+Al guardar, sobrescribe el fichero de Drive; Drive conserva las versiones anteriores (clic derecho → Gestionar
+versiones). Si era un `.mxl`, lo guarda como `.musicxml` al lado y manda el `.mxl` a la papelera.
 
 - `Codigo.gs`: el código.
 - `appsscript.json`: la configuración del proyecto.

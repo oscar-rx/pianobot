@@ -9,6 +9,7 @@ import { PruebaEscala, ESCALAS } from './prueba-escala.js';
 import { ContadorGasto, formatoDolares, mesDe } from './gasto.js';
 import { Partitura } from './partitura.js';
 import { Servidor } from './servidor.js';
+import { indexarNotas, claveOsmd, dedoDe, ponerDedo, siguienteNota, leerXml, escribirXml } from './digitacion.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -393,7 +394,7 @@ $('gasto-tope').addEventListener('change', () => {
   gasto.tope = $('gasto-tope').value;
 });
 // Para que la fase 4 (y las pruebas) puedan apuntar llamadas: window.pianobot.gasto.registrar(modelo, usage)
-window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; } };
+window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; }, get digitacion() { return dig; } };
 
 // ---------- Bucle de dibujo: pulsos del metrónomo ----------
 function dibujar() {
@@ -486,6 +487,7 @@ function pintarSelector() {
 }
 
 async function mostrarXml(xml) {
+  prepararDigitacion(xml);
   await partitura.cargar(xml);
   const f = ajustes.fragmentos[piezaActual.id] ?? { desde: 1, hasta: 4 };
   verFragmento(f.desde, f.hasta);
@@ -511,6 +513,18 @@ async function abrirPieza(pieza, yaMostrado = null) {
     }
   }
   if (esta !== carga) return;
+  // Cambios hechos en la tablet que aún no llegaron a Drive: primero se suben; si no se puede,
+  // se sigue con la copia de la tablet (no se pisa con la versión antigua de Drive).
+  if (mostrado && servidor.pendiente(pieza.id)) {
+    estadoPartitura('Subiendo a Drive los cambios guardados en la tablet…');
+    try {
+      await servidor.guardarPartitura(pieza.id, mostrado);
+    } catch (err) {
+      if (esta === carga) estadoPartitura(`Cambios guardados en la tablet; aún no se han podido subir a Drive (${err.message})`);
+      return;
+    }
+    if (esta !== carga) return;
+  }
   estadoPartitura(mostrado ? 'Comprobando Drive…' : 'Descargando la partitura de Drive…');
   try {
     const xml = await servidor.partitura(pieza.id);
@@ -572,9 +586,132 @@ async function cargarPartitura() {
   await abrirPieza(pieza, mostrado?.id === pieza.id ? mostrado.xml : null);
 }
 
-$('pieza').addEventListener('change', () => {
+$('pieza').addEventListener('change', async () => {
   const pieza = piezas.find((p) => p.id === $('pieza').value);
-  if (pieza) abrirPieza(pieza);
+  if (!pieza) return;
+  await guardarDigitacionYa();
+  activarDigitacion(false);
+  abrirPieza(pieza);
+});
+
+// ---------- Digitación ----------
+// Modo «Digitar»: tocas una nota, eliges el dedo (1-5) y salta a la siguiente nota de esa mano.
+// El dedo se escribe en el propio MusicXML (<fingering>) y se guarda en Drive (y antes en la tablet).
+const dig = { activo: false, doc: null, indice: null, elegida: null, cambios: false, repintar: null, guardar: null };
+let xmlActual = null;
+
+function prepararDigitacion(xml) {
+  xmlActual = xml;
+  try {
+    dig.doc = leerXml(xml);
+    dig.indice = indexarNotas(dig.doc);
+  } catch (err) {
+    console.warn(err);
+    dig.doc = null;
+    dig.indice = null;
+  }
+  dig.elegida = null;
+  pintarPaleta();
+}
+
+const manoDe = (n) => (n.pentagrama === 0 ? 'mano derecha' : n.pentagrama === 1 ? 'mano izquierda' : `pentagrama ${n.pentagrama + 1}`);
+
+function pintarPaleta() {
+  const n = dig.elegida;
+  const dedo = n ? dedoDe(n.el) : null;
+  for (const b of document.querySelectorAll('.dedo')) {
+    b.disabled = !n;
+    b.classList.toggle('actual', b.dataset.dedo !== '' && Number(b.dataset.dedo) === dedo);
+  }
+  $('dig-nota').textContent = n
+    ? `${nombreNota(n.midi)} · compás ${n.el.parentElement.getAttribute('number') ?? n.compas + 1} · ${manoDe(n)}`
+    : 'Toca una nota de la partitura';
+}
+
+function resaltarElegida() {
+  const k = dig.elegida?.clave;
+  partitura.marcar('nota-elegida', (gn) => k != null && claveOsmd(gn.sourceNote) === k);
+}
+
+function elegirNota(nota) {
+  dig.elegida = nota;
+  resaltarElegida();
+  pintarPaleta();
+}
+
+function activarDigitacion(activo) {
+  dig.activo = !!(activo && dig.indice && partitura.osmd);
+  $('digitar').setAttribute('aria-pressed', String(dig.activo));
+  $('paleta-dedos').hidden = !dig.activo;
+  $('partitura').classList.toggle('digitando', dig.activo);
+  if (!dig.activo) {
+    dig.elegida = null;
+    if (partitura.osmd) resaltarElegida();
+    guardarDigitacionYa();
+  }
+  pintarPaleta();
+}
+
+function escribirDedo(dedo) {
+  const n = dig.elegida;
+  if (!n) return;
+  ponerDedo(n.el, dedo);
+  xmlActual = escribirXml(dig.doc);
+  dig.cambios = true;
+  if (dedo != null) {
+    const siguiente = siguienteNota(dig.indice.notas, n, { hastaCompas: partitura.hasta - 1 });
+    if (siguiente) dig.elegida = siguiente;
+  }
+  resaltarElegida();
+  pintarPaleta();
+  // Se repinta y se guarda un poco después, para poder ir pulsando dedos seguidos sin esperas.
+  clearTimeout(dig.repintar);
+  dig.repintar = setTimeout(async () => {
+    await partitura.recargar(xmlActual);
+    resaltarElegida();
+  }, 350);
+  clearTimeout(dig.guardar);
+  dig.guardar = setTimeout(guardarDigitacionYa, 2500);
+  estadoPartitura('Cambios sin guardar…');
+}
+
+async function guardarDigitacionYa() {
+  clearTimeout(dig.guardar);
+  if (!dig.cambios || !piezaActual) return;
+  dig.cambios = false;
+  const id = piezaActual.id;
+  estadoPartitura('Guardando en Drive…');
+  try {
+    await servidor.guardarPartitura(id, xmlActual);
+    if (!dig.cambios) estadoPartitura('Digitación guardada en Drive');
+  } catch (err) {
+    console.warn(err);
+    estadoPartitura(`Guardada en la tablet; se subirá a Drive cuando se pueda (${err.message})`);
+  }
+}
+
+$('digitar').addEventListener('click', () => activarDigitacion(!dig.activo));
+$('partitura').addEventListener('click', (e) => {
+  if (!dig.activo) return;
+  const nota = partitura.notaEn(e.clientX, e.clientY);
+  const elegida = nota && dig.indice.porClave.get(claveOsmd(nota.sourceNote));
+  if (elegida) elegirNota(elegida);
+});
+for (const b of document.querySelectorAll('.dedo')) {
+  b.addEventListener('click', () => escribirDedo(b.dataset.dedo === '' ? null : Number(b.dataset.dedo)));
+}
+// Con teclado (en el ordenador): 1-5 pone el dedo, 0 o Supr lo quita, Esc sale del modo.
+document.addEventListener('keydown', (e) => {
+  if (!dig.activo || e.target.closest('input, select, textarea')) return;
+  if (/^[1-5]$/.test(e.key)) escribirDedo(Number(e.key));
+  else if (e.key === '0' || e.key === 'Delete' || e.key === 'Backspace') escribirDedo(null);
+  else if (e.key === 'Escape') activarDigitacion(false);
+  else return;
+  e.preventDefault();
+});
+// Si la app se cierra o pasa a segundo plano, se guarda lo pendiente.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') guardarDigitacionYa();
 });
 
 // Añadir una partitura desde la tablet: se sube a la carpeta de Drive y queda en el catálogo.

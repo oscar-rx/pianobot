@@ -5,6 +5,7 @@
 
 const CLAVE_CONEXION = 'pianobot.conexion';
 const PREFIJO_COPIA = 'pianobot.copia.';
+const PREFIJO_PENDIENTE = 'pianobot.pendiente.';
 
 function leerLocal(clave) {
   try {
@@ -107,6 +108,22 @@ export class Servidor {
     for (let i = 0; i < bytes.length; i += 0x8000) binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     const { pieza } = await this.enviar('subir', { nombre: fichero.name, base64: btoa(binario) });
     return pieza;
+  }
+
+  /**
+   * Guarda una partitura modificada (p. ej. con digitación). Primero en la tablet, marcada como
+   * pendiente; si Drive la recibe, deja de estar pendiente. Si no, se reintenta más tarde.
+   */
+  async guardarPartitura(id, xml) {
+    guardarLocal(`${PREFIJO_COPIA}pieza.${id}`, xml);
+    guardarLocal(`${PREFIJO_PENDIENTE}${id}`, true);
+    await this.enviar('guardar', { id, musicxml: xml });
+    // Solo se quita la marca si nadie ha cambiado la copia mientras tanto
+    if (leerLocal(`${PREFIJO_COPIA}pieza.${id}`) === xml) guardarLocal(`${PREFIJO_PENDIENTE}${id}`, false);
+  }
+
+  pendiente(id) {
+    return leerLocal(`${PREFIJO_PENDIENTE}${id}`) === true;
   }
 
   copiaPiezas() {

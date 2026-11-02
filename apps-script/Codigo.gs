@@ -5,6 +5,7 @@
 //   GET  …/exec?accion=piezas&token=…            el catálogo: todas las partituras de la carpeta «piezas»
 //   GET  …/exec?accion=pieza&id=…&token=…        el MusicXML de una pieza
 //   POST …/exec  {"accion":"subir","token":…,"nombre":…,"base64":…}   guarda una partitura nueva en Drive
+//   POST …/exec  {"accion":"guardar","token":…,"id":…,"musicxml":…}    guarda cambios (p. ej. la digitación)
 //
 // Para añadir una pieza basta con meter el fichero en pianobot/piezas (o subirlo desde la app):
 // el script lee de la partitura el título, el compositor, los compases, el compás y el tempo,
@@ -48,8 +49,14 @@ function doPost(e) {
       throw new Error('Petición mal formada.');
     }
     comprobarToken(p.token);
-    if (p.accion !== 'subir') throw new Error('Acción desconocida: ' + p.accion);
-    return { pieza: subirPartitura(p.nombre, p.base64) };
+    switch (p.accion) {
+      case 'subir':
+        return { pieza: subirPartitura(p.nombre, p.base64) };
+      case 'guardar':
+        return { pieza: guardarPartitura(p.id, p.musicxml) };
+      default:
+        throw new Error('Acción desconocida: ' + p.accion);
+    }
   });
 }
 
@@ -91,30 +98,34 @@ function catalogo() {
   const bloqueo = LockService.getScriptLock();
   bloqueo.waitLock(20000);
   try {
-    const hoja = hojaPiezas();
-    const filas = leerFilas(hoja);
-    const porDrive = {};
-    filas.forEach(function (f) { porDrive[f.idDrive] = f; });
-    const usados = {};
-    filas.forEach(function (f) { usados[f.id] = true; });
-
-    const piezas = [];
-    const ficheros = DriveApp.getFolderById(CARPETA_PIEZAS).getFiles();
-    while (ficheros.hasNext()) {
-      const fichero = ficheros.next();
-      if (!EXTENSIONES.test(fichero.getName())) continue;
-      let pieza = porDrive[fichero.getId()];
-      if (!pieza) {
-        pieza = registrar(hoja, fichero, usados);
-        usados[pieza.id] = true;
-      }
-      piezas.push(pieza);
-    }
-    piezas.sort(function (a, b) { return String(a.titulo).localeCompare(String(b.titulo), 'es'); });
-    return piezas;
+    return catalogoSinBloqueo();
   } finally {
     bloqueo.releaseLock();
   }
+}
+
+function catalogoSinBloqueo() {
+  const hoja = hojaPiezas();
+  const filas = leerFilas(hoja);
+  const porDrive = {};
+  filas.forEach(function (f) { porDrive[f.idDrive] = f; });
+  const usados = {};
+  filas.forEach(function (f) { usados[f.id] = true; });
+
+  const piezas = [];
+  const ficheros = DriveApp.getFolderById(CARPETA_PIEZAS).getFiles();
+  while (ficheros.hasNext()) {
+    const fichero = ficheros.next();
+    if (!EXTENSIONES.test(fichero.getName())) continue;
+    let pieza = porDrive[fichero.getId()];
+    if (!pieza) {
+      pieza = registrar(hoja, fichero, usados);
+      usados[pieza.id] = true;
+    }
+    piezas.push(pieza);
+  }
+  piezas.sort(function (a, b) { return String(a.titulo).localeCompare(String(b.titulo), 'es'); });
+  return piezas;
 }
 
 function hojaPiezas() {
@@ -210,6 +221,50 @@ function subirPartitura(nombre, base64) {
   if (carpeta.getFilesByName(nombre).hasNext()) throw new Error('Ya hay un fichero «' + nombre + '» en la carpeta.');
   const fichero = carpeta.createFile(blob);
   return catalogo().filter(function (p) { return p.idDrive === fichero.getId(); })[0];
+}
+
+/**
+ * Sobrescribe la partitura de una pieza con el MusicXML que manda la app (p. ej. con digitación nueva).
+ * Drive guarda las versiones anteriores del fichero (clic derecho → Gestionar versiones).
+ * Si la pieza era un .mxl (comprimido), se guarda como .musicxml al lado, la fila de «Piezas» pasa a apuntar
+ * al nuevo y el .mxl va a la papelera (se puede recuperar durante 30 días).
+ */
+function guardarPartitura(id, xml) {
+  xml = String(xml || '');
+  if (!/<score-(partwise|timewise)[\s>]/.test(xml) || !/<\/score-(partwise|timewise)>\s*$/.test(xml)) {
+    throw new Error('Lo recibido no es una partitura MusicXML completa: no se guarda nada.');
+  }
+  const bloqueo = LockService.getScriptLock();
+  bloqueo.waitLock(20000);
+  try {
+    const pieza = catalogoSinBloqueo().filter(function (p) { return String(p.id) === String(id); })[0];
+    if (!pieza) throw new Error('No encuentro la pieza «' + id + '».');
+    const fichero = DriveApp.getFileById(pieza.idDrive);
+    const bytes = fichero.getBlob().getBytes();
+    const esZip = bytes.length > 1 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+    if (!esZip) {
+      fichero.setContent(xml);
+      return pieza;
+    }
+    const nombre = fichero.getName().replace(/\.mxl$/i, '') + '.musicxml';
+    const nuevo = DriveApp.getFolderById(CARPETA_PIEZAS).createFile(nombre, xml, 'application/xml');
+    const hoja = hojaPiezas();
+    const columnaDrive = CABECERA_PIEZAS.indexOf('ID de Drive') + 1;
+    const columnaFichero = CABECERA_PIEZAS.indexOf('Fichero') + 1;
+    const ids = hoja.getRange(2, columnaDrive, Math.max(hoja.getLastRow() - 1, 1), 1).getValues();
+    ids.forEach(function (fila, i) {
+      if (String(fila[0]) === pieza.idDrive) {
+        hoja.getRange(i + 2, columnaFichero).setValue(nombre);
+        hoja.getRange(i + 2, columnaDrive).setValue(nuevo.getId());
+      }
+    });
+    fichero.setTrashed(true);
+    pieza.fichero = nombre;
+    pieza.idDrive = nuevo.getId();
+    return pieza;
+  } finally {
+    bloqueo.releaseLock();
+  }
 }
 
 /** Devuelve el MusicXML como texto, descomprimiéndolo si es un .mxl (un zip). */
