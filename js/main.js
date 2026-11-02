@@ -12,6 +12,7 @@ import { Servidor } from './servidor.js';
 import { indexarNotas, claveOsmd, dedoDe, ponerDedo, siguienteNota, leerXml, escribirXml } from './digitacion.js';
 import { esperadasDelFragmento, compasesDelFragmento, alinear, analizar } from './comparar.js';
 import { GrabadorIntentos } from './intento.js';
+import { PracticaAlTempo } from './al-tempo.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -72,6 +73,7 @@ async function empezar() {
   entrada.addEventListener('nota', (e) => {
     alRecibirNota(e.detail);
     grabador.nota(e.detail);
+    if (practica) aplicarAlTempo(practica.nota(e.detail));
   });
   entrada.addEventListener('pedal', (e) => {
     $('pedal').hidden = !e.detail.pisado;
@@ -414,7 +416,7 @@ $('gasto-tope').addEventListener('change', () => {
   gasto.tope = $('gasto-tope').value;
 });
 // Para que la fase 4 (y las pruebas) puedan apuntar llamadas: window.pianobot.gasto.registrar(modelo, usage)
-window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; }, get digitacion() { return dig; }, get ultimoIntento() { return ultimoIntento; } };
+window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; }, get digitacion() { return dig; }, get ultimoIntento() { return ultimoIntento; }, get alTempo() { return practica; } };
 
 // ---------- Bucle de dibujo: pulsos del metrónomo ----------
 function dibujar() {
@@ -465,6 +467,7 @@ function encuadrarPartitura() {
 function verFragmento(desde, hasta) {
   if (!partitura.osmd) return;
   grabador.activar(grabador.activo); // un intento a medias de otro fragmento no vale
+  if (practica) pararAlTempo();
   partitura.mostrar(desde, hasta);
   ajustarHoja();
   if (piezaActual) ajustes.fragmentos[piezaActual.id] = { desde: partitura.desde, hasta: partitura.hasta };
@@ -685,6 +688,7 @@ function elegirNota(nota) {
 
 function activarDigitacion(activo) {
   if (activo && grabador.activo) activarCorreccion(false);
+  if (activo && practica) pararAlTempo();
   dig.activo = !!(activo && dig.indice && partitura.osmd);
   $('digitar').setAttribute('aria-pressed', String(dig.activo));
   $('paleta-dedos').hidden = !dig.activo;
@@ -798,6 +802,7 @@ async function activarCorreccion(activo) {
     return;
   }
   if (activo && dig.activo) activarDigitacion(false);
+  if (activo && practica) pararAlTempo();
   if (activo && !entrada) await empezar();
   const ok = !!(activo && entrada);
   grabador.activar(ok);
@@ -885,6 +890,109 @@ grabador.addEventListener('intento', (e) => {
   estadoPartitura('Corregido. Toca otra vez cuando quieras.');
 });
 
+// ---------- Al tempo ----------
+// Con el metrónomo: un compás de cuenta y, después, la línea avanza sola al tempo. Cada nota se juzga en su
+// momento (verde si aciertas, rojo si tocas otra, naranja si se te pasa). Al acabar el fragmento, se para.
+let practica = null;
+let estadosAlTempo = new Map();
+
+async function empezarAlTempo() {
+  if (!dig.indice || !partitura.osmd) {
+    estadoPartitura('Primero tiene que estar cargada la partitura.');
+    return;
+  }
+  if (dig.activo) activarDigitacion(false);
+  if (grabador.activo) await activarCorreccion(false);
+  await activarAudio();
+  if (!entrada) await empezar();
+  if (!entrada) {
+    estadoPartitura('Conecta el piano para practicar al tempo.');
+    return;
+  }
+  const esperadas = esperadasDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano });
+  const compases = compasesDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta });
+  const duracion = compases.reduce((s, c) => s + c.duracion, 0);
+  const tiempos = Math.max(1, Math.round(compases[0]?.duracion ?? 4));
+  // El metrónomo arranca de cero: su primer clic abre el compás de cuenta
+  metronomo.parar();
+  metronomo.pulsosPorCompas = tiempos;
+  metronomo.arrancar();
+  const negra = 60 / metronomo.ppm;
+  const t0 = metronomo.pulsos[0].tiempo + tiempos * negra;
+  practica = new PracticaAlTempo({ esperadas, t0, negra, duracion });
+  practica.compases = compases;
+  practica.tiempos = tiempos;
+  practica.momentos = [...new Set(esperadas.map((e) => e.pos))].sort((a, b) => a - b);
+  practica.siguiente = 0;
+  estadosAlTempo = new Map();
+  limpiarMarcas();
+  ajustarHoja();
+  encuadrarPartitura();
+  partitura.irACompas(partitura.desde);
+  $('al-tempo').setAttribute('aria-pressed', 'true');
+  $('al-tempo').textContent = '■ Parar';
+  estadoPartitura(`Cuenta: ${'○'.repeat(tiempos)} · empieza en el siguiente compás`);
+  requestAnimationFrame(bucleAlTempo);
+}
+
+function aplicarAlTempo(cambios) {
+  if (!cambios.length) return;
+  for (const c of cambios) estadosAlTempo.set(c.clave, c.estado);
+  partitura.pintarEstados((gn) => estadosAlTempo.get(claveOsmd(gn.sourceNote)));
+}
+
+function bucleAlTempo() {
+  if (!practica) return;
+  const ahora = ahoraSonando();
+  const pos = practica.posicion(ahora);
+  if (pos < 0) {
+    const n = Math.min(practica.tiempos, Math.floor(pos + practica.tiempos) + 1);
+    estadoPartitura(`Cuenta: ${'●'.repeat(Math.max(0, n))}${'○'.repeat(Math.max(0, practica.tiempos - n))} · empieza en el siguiente compás`);
+  } else {
+    // La línea salta a cada nota en su momento; el sombreado, a cada compás
+    let movida = false;
+    while (practica.siguiente < practica.momentos.length && practica.momentos[practica.siguiente] <= pos) {
+      practica.siguiente++;
+      movida = true;
+    }
+    if (movida) {
+      const c = practica.compases.findLast((x) => x.inicio <= pos);
+      if (c && c.numero !== partitura.compas) partitura.irACompas(c.numero, { desplazar: false });
+      partitura.seguirA(inicioFragmento() + practica.momentos[practica.siguiente - 1]);
+      estadoPartitura(`Al tempo · compás ${partitura.compas}`);
+    }
+    aplicarAlTempo(practica.avanzar(ahora));
+  }
+  if (practica.terminado(ahora)) terminarAlTempo();
+  else requestAnimationFrame(bucleAlTempo);
+}
+
+function terminarAlTempo() {
+  const p = practica;
+  pararAlTempo();
+  const r = p.resumen(p.compases);
+  ultimoIntento = { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, metronomo: r.total.tempo, modo: 'al tempo', ...r };
+  pintarIntento(ultimoIntento);
+  partitura.pintarEstados((gn) => r.notas.get(claveOsmd(gn.sourceNote))?.estado);
+  partitura.irACompas(partitura.desde);
+  estadoPartitura('Hecho. Pulsa ⏱ Al tempo para repetir.');
+}
+
+function pararAlTempo() {
+  practica = null;
+  metronomo.parar();
+  partitura.ocultarLinea();
+  $('al-tempo').setAttribute('aria-pressed', 'false');
+  $('al-tempo').textContent = '⏱ Al tempo';
+}
+
+$('al-tempo').addEventListener('click', () => {
+  if (practica) {
+    pararAlTempo();
+    estadoPartitura('Parado.');
+  } else empezarAlTempo();
+});
+
 const conSigno = (ms) => (ms == null ? '–' : `${ms > 0 ? '+' : ''}${ms} ms`);
 
 function pintarIntento(r) {
@@ -897,8 +1005,9 @@ function pintarIntento(r) {
   if (t.falladas) partes.push(`${t.falladas} fallada${t.falladas > 1 ? 's' : ''}`);
   if (t.omitidas) partes.push(`${t.omitidas} omitida${t.omitidas > 1 ? 's' : ''}`);
   if (t.titubeos) partes.push(`${t.titubeos} titubeo${t.titubeos > 1 ? 's' : ''}`);
-  if (t.tempo) partes.push(`tempo ${t.tempo} ppm${r.metronomo ? ` (metrónomo a ${r.metronomo})` : ''}`);
-  if (t.desajusteMs != null) partes.push(`desajuste medio ${conSigno(t.desajusteMs)} (±${t.desajusteAbsMs} ms, respecto a ${t.referencia === 'metrónomo' ? 'el metrónomo' : 'tu pulso'})`);
+  if (r.modo === 'al tempo') partes.push(`al tempo, a ${t.tempo} ppm`);
+  else if (t.tempo) partes.push(`tempo ${t.tempo} ppm${r.metronomo ? ` (metrónomo a ${r.metronomo})` : ''}`);
+  if (t.desajusteMs != null) partes.push(`desajuste medio ${conSigno(t.desajusteMs)} (±${t.desajusteAbsMs} ms, respecto ${t.referencia === 'metrónomo' ? 'al metrónomo' : 'a tu pulso'})`);
   $('intento-resumen').textContent = partes.join(' · ');
 
   const pedal = new Map(r.pedal.map((p) => [p.compas, p]));

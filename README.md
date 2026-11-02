@@ -18,6 +18,10 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   metrónomo si suena, si no contra tu propio pulso), tempo real, articulación (% del valor escrito que mantienes la
   tecla) y pedal (aparte: % del compás pisado y veces que se pisa). Mientras tocas, el cursor sigue por dónde vas.
   Se queda esperando el siguiente intento.
+- **⏱ Al tempo:** con el metrónomo. Al pulsarlo da un compás de cuenta y después la línea roja avanza sola al tempo;
+  cada nota se juzga en su momento: verde si la aciertas, rojo si tocas otra, naranja si se te pasa. Al acabar el
+  fragmento se para el metrónomo y sale el resumen (desajuste respecto al metrónomo). El tempo, en el metrónomo de
+  arriba.
 - **Seguimiento en directo:** mientras tocas con «Corregir», una línea roja sigue la nota por la que vas, las notas se
   colorean al momento (verde bien, rojo fallada, naranja saltada) y la hoja baja sola al pasar de sistema.
 - **Controles arriba:** Digitar, Corregir, mano, compás y un metrónomo mínimo (− tempo + ▶) encima de la partitura,
@@ -68,6 +72,7 @@ js/musicxml.js              notas del MusicXML (altura, mano, momento, duración
 js/digitacion.js            escribe y lee <fingering>
 js/comparar.js              fase 3: alineación tolerante (como un diff) y métricas por compás y mano
 js/intento.js               graba intentos: empiezan con la primera nota y acaban tras unos segundos sin tocar
+js/al-tempo.js              modo «Al tempo»: cada nota se juzga en su momento según el metrónomo
 js/vendor/                  OpenSheetMusicDisplay 2.2.1 (licencia BSD-3), guardada aquí para no depender de un CDN
 js/servidor.js              conexión con el Apps Script y copia local (catálogo y partituras)
 apps-script/                el Apps Script: el puente con Google Drive y el Sheet «pianobot»
