@@ -940,8 +940,6 @@ async function empezarAlTempo() {
   practica = new PracticaAlTempo({ esperadas, t0, negra, duracion });
   practica.compases = compases;
   practica.tiempos = tiempos;
-  practica.momentos = [...new Set(esperadas.map((e) => e.pos))].sort((a, b) => a - b);
-  practica.siguiente = 0;
   estadosAlTempo = new Map();
   limpiarMarcas();
   ajustarHoja();
@@ -966,19 +964,15 @@ function bucleAlTempo() {
   if (pos < 0) {
     const n = Math.min(practica.tiempos, Math.floor(pos + practica.tiempos) + 1);
     estadoPartitura(`Cuenta: ${'●'.repeat(Math.max(0, n))}${'○'.repeat(Math.max(0, practica.tiempos - n))} · empieza en el siguiente compás`);
+    partitura.moverCabezal(inicioFragmento());
   } else {
-    // La línea salta a cada nota en su momento; el sombreado, a cada compás
-    let movida = false;
-    while (practica.siguiente < practica.momentos.length && practica.momentos[practica.siguiente] <= pos) {
-      practica.siguiente++;
-      movida = true;
+    // El sombreado salta de compás en compás (y la hoja se encuadra); la línea avanza de forma continua
+    const c = practica.compases.findLast((x) => x.inicio <= pos);
+    if (c && c.numero !== partitura.compas) {
+      partitura.irACompas(c.numero);
+      estadoPartitura(`Al tempo · compás ${c.numero}`);
     }
-    if (movida) {
-      const c = practica.compases.findLast((x) => x.inicio <= pos);
-      if (c && c.numero !== partitura.compas) partitura.irACompas(c.numero);
-      partitura.seguirA(inicioFragmento() + practica.momentos[practica.siguiente - 1]);
-      estadoPartitura(`Al tempo · compás ${partitura.compas}`);
-    }
+    partitura.moverCabezal(inicioFragmento() + pos);
     aplicarAlTempo(practica.avanzar(ahora));
   }
   if (practica.terminado(ahora)) terminarAlTempo();
@@ -1000,6 +994,7 @@ function pararAlTempo() {
   practica = null;
   metronomo.parar();
   partitura.ocultarLinea();
+  partitura.ocultarCabezal();
   $('al-tempo').setAttribute('aria-pressed', 'false');
   $('al-tempo').textContent = '⏱ Al tempo';
 }

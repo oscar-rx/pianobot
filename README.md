@@ -18,7 +18,7 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   metrónomo si suena, si no contra tu propio pulso), tempo real, articulación (% del valor escrito que mantienes la
   tecla) y pedal (aparte: % del compás pisado y veces que se pisa). Mientras tocas, el cursor sigue por dónde vas.
   Se queda esperando el siguiente intento.
-- **⏱ Al tempo:** con el metrónomo. Al pulsarlo da un compás de cuenta y después la línea roja avanza sola al tempo;
+- **⏱ Al tempo:** con el metrónomo. Al pulsarlo da un compás de cuenta y después la línea roja avanza sola y de forma continua al tempo (también en los silencios);
   cada nota se juzga en su momento: verde si la aciertas, rojo si tocas otra, naranja si se te pasa. Al acabar el
   fragmento se para el metrónomo y sale el resumen (desajuste respecto al metrónomo). El tempo, en el metrónomo de
   arriba.

@@ -104,6 +104,80 @@ export class Partitura extends EventTarget {
   }
 
   /**
+   * Cabezal: una línea que avanza de forma CONTINUA (modo «Al tempo»). Se coloca en un momento cualquiera de la
+   * pieza (en negras desde el principio): entre dos puntos pintados de la partitura (notas, silencios o el final
+   * de un compás), avanza en proporción al tiempo, con la anchura real de cada compás. Devuelve el elemento.
+   */
+  moverCabezal(negras) {
+    const puntos = this.#lineaDeTiempo();
+    if (!puntos.length) return null;
+    let i = puntos.findLastIndex((p) => p.pos <= negras);
+    if (i < 0) i = 0;
+    const a = puntos[i];
+    const b = puntos[i + 1];
+    let x = a.x;
+    if (b && b.sistema === a.sistema && b.pos > a.pos) x = a.x + ((Math.min(negras, b.pos) - a.pos) / (b.pos - a.pos)) * (b.x - a.x);
+    let el = this.contenedor.querySelector(':scope > .cabezal');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'cabezal';
+      this.contenedor.append(el);
+    }
+    el.hidden = false;
+    el.style.transform = `translate(${x}px, ${a.top}px)`;
+    el.style.height = `${a.bottom - a.top}px`;
+    this.#aLaVista(el);
+    return el;
+  }
+
+  ocultarCabezal() {
+    const el = this.contenedor.querySelector(':scope > .cabezal');
+    if (el) el.hidden = true;
+  }
+
+  /**
+   * Puntos de la línea de tiempo del fragmento pintado: {pos (negras desde el principio), x, top, bottom, sistema},
+   * en píxeles dentro de la hoja. 1 unidad de OSMD = 10 px × zoom, contando desde la esquina del SVG.
+   */
+  #lineaDeTiempo() {
+    const svg = this.contenedor.querySelector('svg');
+    if (!svg || !this.osmd?.GraphicSheet) return [];
+    const hoja = this.contenedor;
+    const rh = hoja.getBoundingClientRect();
+    const rs = svg.getBoundingClientRect();
+    const ox = rs.left - rh.left + hoja.scrollLeft;
+    const oy = rs.top - rh.top + hoja.scrollTop;
+    const f = 10 * this.osmd.zoom;
+    const puntos = [];
+    for (const fila of this.osmd.GraphicSheet.MeasureList) {
+      const gm = fila?.find(Boolean);
+      const sistema = gm?.ParentMusicSystem;
+      if (!gm || !sistema || gm.MeasureNumber < this.desde || gm.MeasureNumber > this.hasta) continue;
+      const y0 = sistema.PositionAndShape.AbsolutePosition.y;
+      const top = oy + (y0 + sistema.StaffLines[0].PositionAndShape.RelativePosition.y) * f - 8;
+      const bottom = oy + (y0 + sistema.StaffLines.at(-1).PositionAndShape.RelativePosition.y + 4) * f + 8;
+      const inicio = gm.parentSourceMeasure.AbsoluteTimestamp.RealValue * 4;
+      const duracion = gm.parentSourceMeasure.Duration.RealValue * 4;
+      // Un punto por cada momento del compás en que empieza algo (nota o silencio, en cualquier pentagrama)
+      const porMomento = new Map();
+      for (const compas of fila) {
+        if (!compas) continue;
+        for (const entrada of compas.staffEntries) {
+          const rel = entrada.relInMeasureTimestamp.RealValue * 4;
+          const x = ox + entrada.PositionAndShape.AbsolutePosition.x * f;
+          if (!porMomento.has(rel) || x < porMomento.get(rel)) porMomento.set(rel, x);
+        }
+      }
+      for (const [rel, x] of porMomento) puntos.push({ pos: inicio + rel, x, top, bottom, sistema });
+      // Final del compás: su barra de la derecha
+      puntos.push({ pos: inicio + duracion, x: ox + (gm.PositionAndShape.AbsolutePosition.x + gm.PositionAndShape.BorderRight) * f, top, bottom, sistema, fin: true });
+    }
+    puntos.sort((a, b) => a.pos - b.pos || (b.fin ? 1 : 0) - (a.fin ? 1 : 0));
+    // Entre compases de la misma línea se va de la última nota a la primera del siguiente (pasando la barra)
+    return puntos.filter((p, k) => !(p.fin && puntos[k + 1] && puntos[k + 1].pos === p.pos && puntos[k + 1].sistema === p.sistema));
+  }
+
+  /**
    * Coloca el compás actual (su cursor sombreado) siempre en el mismo sitio, para no mover la mirada:
    * en «una línea», a la izquierda (con un trocito del anterior); en «páginas», su línea arriba del todo.
    */

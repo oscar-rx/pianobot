@@ -16,7 +16,7 @@ const capturas = args.includes('--capturas') ? args[args.indexOf('--capturas') +
 if (capturas) mkdirSync(capturas, { recursive: true });
 
 const APPS_SCRIPT = 'https://script.google.com/macros/s/PRUEBA/exec';
-const XML = partituraPrueba(16);
+const XML = partituraPrueba(16, { silencios: [10] }); // el compás 10 acaba con un silencio de blanca
 
 async function appsScript(ruta) {
   const p = Object.fromEntries(new URL(ruta.request().url()).searchParams);
@@ -70,14 +70,14 @@ try {
   comprobar((await pagina.textContent('#al-tempo')).includes('Parar'), 'el botón pasa a «Parar»');
 
   // El pianista toca cada nota en su momento (+15 ms), salvo: se salta la 2.ª del compás 9 (mano derecha)
-  // y en la 3.ª del compás 10 toca otra tecla.
+  // y en la 2.ª del compás 10 toca otra tecla.
   const plan = await pagina.evaluate(async () => {
     const { ahoraSonando } = await import('/js/audio.js');
     const p = window.pianobot.alTempo;
     const ahora = ahoraSonando();
     const derecha = (c) => p.notas.filter((n) => n.e.compas === c && n.e.mano === 'derecha');
     const saltar = derecha(9)[1].e.clave;
-    const cambiar = derecha(10)[2].e.clave;
+    const cambiar = derecha(10)[1].e.clave;
     const eventos = [];
     for (const n of p.notas) {
       if (n.e.clave === saltar) continue;
@@ -90,11 +90,30 @@ try {
   });
   comprobar(plan.cuentaMs > 1500 && plan.cuentaMs < 2200, `la primera nota llega tras un compás de cuenta (${Math.round(plan.cuentaMs)} ms a 120 ppm)`);
 
-  // A mitad del compás 10: el Mi saltado del 9 ya está en naranja, sin esperar al final
-  await pagina.waitForTimeout(plan.cuentaMs + 2000 + 600);
+  // La línea avanza de forma continua: posición cada 100 ms durante los dos compases (también en el silencio)
+  const muestras = await pagina.evaluate(async (inicioMs) => {
+    const xs = [];
+    await new Promise((ok) => setTimeout(ok, inicioMs));
+    for (let i = 0; i < 38; i++) {
+      const el = document.querySelector('#partitura > .cabezal');
+      const m = el && !el.hidden ? /translate\(([\d.]+)px/.exec(el.style.transform) : null;
+      xs.push(m ? Number(m[1]) : null);
+      await new Promise((ok) => setTimeout(ok, 100));
+    }
+    return xs;
+  }, plan.cuentaMs + 50);
+  const pasos = muestras.slice(1).map((x, i) => x - muestras[i]);
+  const avances = pasos.filter((d) => d > 0.5).length;
+  comprobar(muestras.every((x) => x != null) && pasos.every((d) => d >= -0.5), 'la línea avanza sola, sin volver atrás');
+  comprobar(avances >= 34, `de forma continua: se mueve en ${avances} de ${pasos.length} muestras (no salta de nota en nota)`);
+  // Compás 10 = muestras 20-37; el silencio de blanca son sus dos últimos tiempos (muestras ~30-37)
+  const enSilencio = pasos.slice(30, 36).filter((d) => d > 0.5).length;
+  comprobar(enSilencio >= 5, `también avanza durante el silencio (${enSilencio} de 6)`);
+  const mayor = Math.max(...pasos);
+  const tipico = pasos.filter((d) => d > 0.5).sort((a, b) => a - b)[Math.floor(avances / 2)];
+  comprobar(mayor < tipico * 4, `sin saltos bruscos (paso mayor ${mayor.toFixed(1)} px, típico ${tipico.toFixed(1)} px)`);
   const aMitad = await contar(pagina);
   comprobar(aMitad.omitida === 1 && aMitad.bien >= 5, `en su momento: la saltada en naranja y las tocadas en verde (${JSON.stringify(aMitad)})`);
-  comprobar(!(await pagina.evaluate(() => window.pianobot.partitura.osmd.cursors[1].Hidden)), 'la línea roja avanza sola');
 
   await pagina.waitForFunction(() => !window.pianobot.alTempo, null, { timeout: plan.finMs + 4000 });
   const final = await contar(pagina);
