@@ -18,12 +18,11 @@ decide qué practicar. El plan por fases y las decisiones están en `README.md`.
 
 ## Subir el Apps Script
 
-Cuando cambie `apps-script/`, súbelo tú con clasp (Oscar eligió esto en vez de guardar credenciales en GitHub):
+Se sube solo con GitHub Actions (`.github/workflows/apps-script.yml`, igual que el entrenabot) en cada push que toque
+`apps-script/`. Usa los secretos `CLASPRC_JSON` y `APPS_SCRIPT_DEPLOYMENT_ID`. Después de un cambio en el Apps Script,
+comprueba en Actions que la tarea «Apps Script» ha terminado bien.
 
-1. `npx --yes @google/clasp@3.4.1 login --no-localhost`: muestra un enlace y espera la respuesta. Pásale el enlace
-   a Oscar; él lo abre, acepta y te pega la dirección `http://localhost:8888/?…`. Como el comando espera por la
-   entrada estándar, arráncalo en segundo plano leyendo de una tubería (`mkfifo`) y escribe ahí la dirección.
-2. `herramientas/subir-apps-script.sh`: pruebas, `clasp push` y versión nueva en la misma implementación
-   (la URL no cambia).
-
+Si hiciera falta subirlo desde la sesión: `npx --yes @google/clasp@3.4.1 login --no-localhost` (muestra un enlace y
+espera la respuesta por la entrada estándar: arráncalo en segundo plano leyendo de una tubería `mkfifo`; Oscar abre
+el enlace y te pega la dirección `http://localhost:8888/?…`) y luego `herramientas/subir-apps-script.sh`.
 No muestres ni guardes las credenciales de clasp (`~/.clasprc.json`) fuera de la sesión.

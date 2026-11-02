@@ -47,15 +47,17 @@ pongas la URL ni el token en el repo ni los compartas.
 
 ## Cuando cambie el código
 
-Lo sube Claude con clasp desde la sesión: `herramientas/subir-apps-script.sh`. Pasa las pruebas, sube
-`Codigo.gs` y `appsscript.json` (los únicos que deja pasar `.claspignore`) y publica una versión nueva en la misma
-implementación, así que la URL y el token no cambian.
+Se sube solo, igual que en el entrenabot: cada push a la rama que toque `apps-script/` lanza
+`.github/workflows/apps-script.yml`, que pasa las pruebas, sube `Codigo.gs` y `appsscript.json` con clasp (los únicos
+que deja pasar `.claspignore`) y publica una versión nueva en la misma implementación. La URL y el token no cambian.
 
-En cada sesión nueva de Claude hace falta autorizar clasp una vez: Claude te pasa un enlace de Google, lo abres,
-aceptas, y le pegas la dirección `http://localhost:8888/?…` a la que te manda el navegador (dice «No se puede
-acceder a este sitio»: es normal). La autorización se queda solo en esa sesión, nunca en GitHub.
+Necesita dos secretos en GitHub (**Settings → Secrets and variables → Actions**):
 
-`.clasp.json` enlaza esta carpeta con el proyecto «pianobot» (el que va pegado al Sheet).
+- `CLASPRC_JSON`: la autorización de clasp de tu cuenta de Google. Vale la misma que la del entrenabot.
+- `APPS_SCRIPT_DEPLOYMENT_ID`: el ID de la implementación (el trozo de la URL entre `/s/` y `/exec`).
 
-Si alguna vez hiciera falta a mano: pega el `Codigo.gs` nuevo en el editor, guarda y ve a **Deploy → Manage
-deployments** → lápiz → Version: **New version** → **Deploy**.
+Mientras falten, la tarea avisa y no sube nada. `.clasp.json` enlaza esta carpeta con el proyecto «pianobot».
+
+Si alguna vez hiciera falta subirlo desde una sesión de Claude: `herramientas/subir-apps-script.sh` (antes,
+`npx --yes @google/clasp@3.4.1 login --no-localhost`). Y a mano: pega el `Codigo.gs` nuevo en el editor, guarda y
+ve a **Deploy → Manage deployments** → lápiz → Version: **New version** → **Deploy**.
