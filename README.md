@@ -71,3 +71,13 @@ Pon también un límite de gasto mensual en la Claude Console, para que no se pa
 ## Plan
 
 Fases 0 a 7, según el documento de diseño: oír → ver → comparar → profe en texto → voz → memoria → extras.
+
+## Ideas apuntadas
+
+- **Armonía del pasaje en pantalla** (para el profe con IA): enseñar el acorde de cada compás o pulso del
+  fragmento (p. ej. «Lam → Mi7/Sol# → Lam»), como ayuda para memorizar. En la Invención 13 los acordes van
+  arpegiados entre las dos voces, así que el análisis lo haría Claude una sola vez por pieza (con Sonnet), se
+  guardaría con la pieza y se pintaría como cifrado encima del pentagrama: el MusicXML admite acordes
+  (`<harmony>`) y OSMD los dibuja. El profe también podría usarlo al hablar («el 11 es Mi7: piensa en el arpegio»).
+- **Duración / articulación** (por decidir, fase 3): comparar cuánto se mantiene cada tecla con el valor escrito,
+  en proporción, separando dedos y pedal.
