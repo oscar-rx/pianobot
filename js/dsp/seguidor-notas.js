@@ -11,7 +11,7 @@ import { frecuenciaAMidi } from '../notas.js';
 const POR_DEFECTO = {
   sensibilidadDb: 12, // dB por encima del ruido de fondo para aceptar un ataque
   saltoAtaqueDb: 3, // subida mínima de energía que cuenta como ataque
-  minDbAbsoluto: -75, // nunca aceptar nada por debajo de esto (dBFS)
+  minDbAbsoluto: -80, // nunca aceptar nada por debajo de esto (dBFS)
   maxAperiodicidad: 0.25, // por encima de esto el cuadro no tiene tono claro
   cuadrosConfirmar: 3, // cuadros seguidos con la misma nota para confirmar un ataque
   cuadrosCambio: 4, // cuadros seguidos con otra nota para aceptar un cambio sin ataque
@@ -19,8 +19,11 @@ const POR_DEFECTO = {
   ventanaConfirmacion: 0.15, // s: tiempo máximo para que un ataque tenga tono
   refractario: 0.06, // s: tras un ataque no se busca otro
   caidaDb: 32, // la nota se da por acabada al caer esto desde su pico
-  subidaFondoDbPorS: 2, // lo rápido que el ruido de fondo puede subir (en silencio)
+  memoriaFondo: 3, // s de silencio que se miran para estimar el ruido de fondo
+  silencioDigitalDb: -100, // por debajo de esto son ceros del micro, no ruido real
 };
+
+const CUADROS_MINIMOS_FONDO = 40; // ~0,2 s de ruido antes de aceptar notas
 
 export class SeguidorNotas {
   /** @param {number} duracionVentana s que abarca el análisis de altura @param {number} duracionSalto s entre cuadros */
@@ -28,11 +31,13 @@ export class SeguidorNotas {
     this.o = { ...POR_DEFECTO, ...opciones };
     this.ventana = duracionVentana;
     this.salto = duracionSalto;
+    this.historialFondo = new Float32Array(Math.max(CUADROS_MINIMOS_FONDO, Math.round(this.o.memoriaFondo / (duracionSalto || 0.005))));
     this.reiniciar();
   }
 
   reiniciar() {
     this.fondo = null;
+    this.cuadrosFondo = 0; // cuántos cuadros de silencio se han guardado en total
     this.recientes = [];
     this.cortos = [];
     this.activa = null; // {midi, inicio, picoDb}
@@ -46,12 +51,31 @@ export class SeguidorNotas {
     Object.assign(this.o, opciones);
   }
 
+  // Sin estimación de fondo todavía (justo al arrancar) no se acepta ninguna nota.
   get umbralAtaque() {
-    return Math.max((this.fondo ?? -100) + this.o.sensibilidadDb, this.o.minDbAbsoluto);
+    if (this.fondo == null) return Infinity;
+    return Math.max(this.fondo + this.o.sensibilidadDb, this.o.minDbAbsoluto);
   }
 
   get umbralSilencio() {
-    return Math.max((this.fondo ?? -100) + this.o.sensibilidadDb * 0.5, this.o.minDbAbsoluto - 6);
+    if (this.fondo == null) return Infinity;
+    return Math.max(this.fondo + this.o.sensibilidadDb * 0.5, this.o.minDbAbsoluto - 6);
+  }
+
+  // Ruido de fondo = nivel típico (mediana) de los últimos segundos sin nota.
+  // No vale el mínimo: un instante de ceros (el micro arrancando) lo hundiría y
+  // el umbral dejaría pasar cualquier ruido, se pusiera como se pusiera.
+  #actualizarFondo(rmsDb) {
+    if (rmsDb < this.o.silencioDigitalDb || this.activa || this.candidato) return;
+    const h = this.historialFondo;
+    h[this.cuadrosFondo % h.length] = rmsDb;
+    this.cuadrosFondo++;
+    const n = Math.min(this.cuadrosFondo, h.length);
+    if (n < CUADROS_MINIMOS_FONDO) return;
+    if (this.fondo == null || this.cuadrosFondo % 8 === 0) {
+      const orden = Array.from(h.subarray(0, n)).sort((a, b) => a - b);
+      this.fondo = orden[Math.floor(n / 2)];
+    }
   }
 
   /**
@@ -62,13 +86,8 @@ export class SeguidorNotas {
   procesar({ t, rmsDb, rmsCortoDb = rmsDb, frecuencia, aperiodicidad }) {
     const o = this.o;
     const eventos = [];
-    const dt = this.ultimoT == null ? 0 : t - this.ultimoT;
     this.ultimoT = t;
-
-    // Ruido de fondo: baja al instante, sube despacio y solo en silencio.
-    if (this.fondo == null) this.fondo = rmsDb;
-    else if (rmsDb < this.fondo) this.fondo = rmsDb;
-    else if (!this.activa && !this.candidato) this.fondo = Math.min(rmsDb, this.fondo + o.subidaFondoDbPorS * dt);
+    this.#actualizarFondo(rmsDb);
 
     const conTono = frecuencia > 0 && aperiodicidad <= o.maxAperiodicidad && rmsDb > this.umbralSilencio;
     const midiCuadro = conTono ? Math.round(frecuenciaAMidi(frecuencia)) : null;
@@ -156,7 +175,7 @@ export class SeguidorNotas {
 
   #empezarNota(eventos, midi, inicio, picoDb, frecuencia) {
     if (this.activa) eventos.push({ tipo: 'noteoff', midi: this.activa.midi, tiempo: inicio });
-    eventos.push({ tipo: 'noteon', midi, tiempo: inicio, velocidad: velocidadDesdeDb(picoDb), frecuencia });
+    eventos.push({ tipo: 'noteon', midi, tiempo: inicio, velocidad: velocidadDesdeDb(picoDb), frecuencia, nivelDb: picoDb });
     this.activa = { midi, inicio, picoDb };
   }
 }

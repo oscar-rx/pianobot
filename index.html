@@ -44,12 +44,15 @@
           <div class="medidor-marca fondo" id="medidor-fondo" title="Ruido de fondo"></div>
           <div class="medidor-marca umbral" id="medidor-umbral" title="Umbral para contar una nota"></div>
         </div>
+        <p class="ayuda cifras" id="medidor-cifras">Midiendo el silencio…</p>
         <label class="control">
-          <span>Sensibilidad</span>
-          <input type="range" id="sensibilidad" min="4" max="30" step="1">
+          <span>Umbral</span>
+          <input type="range" id="sensibilidad" min="4" max="40" step="1" aria-describedby="umbral-ayuda">
           <output id="sensibilidad-valor"></output>
         </label>
-        <p class="ayuda">Una nota cada vez: una mano y sin pedal. Pon la tablet cerca del piano y el piano con su altavoz.</p>
+        <p class="ayuda" id="umbral-ayuda">Cuánto tiene que sonar una nota por encima del ruido de la habitación (marca roja).
+          Si salen notas que no has tocado, súbelo. Si se pierden notas suaves, bájalo.
+          Una nota cada vez: una mano y sin pedal.</p>
       </div>
 
       <button type="button" id="empezar" class="primario">Empezar</button>

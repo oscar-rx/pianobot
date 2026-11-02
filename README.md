@@ -33,8 +33,11 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
 Consejos para el micro:
 
-- Si se pierden notas suaves, sube la **sensibilidad**. Si salen notas fantasma, bájala.
-  La barra verde es el volumen que oye, la marca gris es el ruido de fondo y la roja, el umbral.
+- **Umbral:** cuántos dB tiene que sonar una nota por encima del ruido de la habitación. Si salen notas que no
+  has tocado, súbelo. Si se pierden notas suaves, bájalo.
+  La barra verde es el volumen que oye, la marca gris es el ruido de fondo y la roja, el umbral. Debajo salen las
+  cifras, y en la tabla, los dB de cada nota: así se ve a qué altura poner el umbral.
+- Al empezar, la app tarda un momento en medir el silencio; durante ese rato no cuenta notas.
 - El clic del metrónomo no cuenta como nota: es un ruido agudo sin tono, y el micro lo filtra.
 - Con pedal o con legato muy pegado, el micro se lía: oye dos notas a la vez.
   Para eso hará falta el cable.

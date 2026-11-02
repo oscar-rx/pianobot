@@ -91,3 +91,53 @@ test('arpegios con saltos, como el comienzo de la Invención 13, a semicorcheas 
   assert.deepEqual(ons.map((e) => e.midi), midis);
   ons.forEach((e, i) => assert.ok(Math.abs(e.tiempo - notas[i].inicio) < 0.025, `nota ${i}: ${(e.tiempo - notas[i].inicio) * 1000} ms`));
 });
+
+// Habitación «en silencio» como la oye un micro de tablet: arranca con silencio digital
+// (ceros mientras el micro se enciende) y luego ruido que sube y baja, con un zumbido débil
+// (nevera, red eléctrica). Las notas de verdad suenan mucho más fuertes.
+function habitacion(duracion, { conZumbido = true } = {}) {
+  const x = new Float32Array(Math.round(duracion * sr));
+  let s = 99;
+  const azar = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32 - 0.5);
+  for (let i = Math.round(0.4 * sr); i < x.length; i++) {
+    const t = i / sr;
+    // ruido que fluctúa unos ±6 dB a ritmo irregular
+    const vaiven = Math.pow(10, (6 * Math.sin(2 * Math.PI * 1.7 * t) * Math.sin(2 * Math.PI * 0.43 * t + 1)) / 20);
+    x[i] = 0.002 * vaiven * azar();
+    if (conZumbido) x[i] += 0.0015 * vaiven * Math.sin(2 * Math.PI * 100 * t) + 0.001 * Math.sin(2 * Math.PI * 150 * t);
+  }
+  return x;
+}
+
+for (const sensibilidadDb of [12, 30]) {
+  test(`habitación en silencio con arranque en ceros: ninguna nota falsa (umbral ${sensibilidadDb} dB)`, () => {
+    const a = new AnalizadorAudio({ frecuenciaMuestreo: sr, sensibilidadDb });
+    const x = habitacion(8);
+    const ons = [];
+    for (let i = 0; i < x.length; i += 512) ons.push(...a.alimentar(x.subarray(i, i + 512)).filter((e) => e.tipo === 'noteon'));
+    assert.deepEqual(ons.map((e) => e.midi), []);
+  });
+}
+
+test('tras el arranque en ceros, las notas de verdad se siguen oyendo', () => {
+  const ruido = habitacion(6);
+  const notas = [64, 69, 72].map((midi, i) => ({ midi, inicio: 2 + i, duracion: 0.6 }));
+  const piano = sintetizar(notas, { sr, duracion: 6, ruidoDb: -120 });
+  for (let i = 0; i < piano.length; i++) piano[i] += ruido[i];
+  const ons = analizar(piano).filter((e) => e.tipo === 'noteon');
+  assert.deepEqual(ons.map((e) => e.midi), [64, 69, 72]);
+});
+
+test('el umbral responde: subirlo deja fuera las notas suaves', () => {
+  const ruido = habitacion(5, { conZumbido: false });
+  const piano = sintetizar([{ midi: 60, inicio: 2, duracion: 0.6, fuerza: 0.02 }], { sr, duracion: 5, ruidoDb: -120 });
+  for (let i = 0; i < piano.length; i++) piano[i] += ruido[i];
+  const contar = (sensibilidadDb) => {
+    const a = new AnalizadorAudio({ frecuenciaMuestreo: sr, sensibilidadDb });
+    let n = 0;
+    for (let i = 0; i < piano.length; i += 512) n += a.alimentar(piano.subarray(i, i + 512)).filter((e) => e.tipo === 'noteon').length;
+    return n;
+  };
+  assert.equal(contar(10), 1);
+  assert.equal(contar(40), 0);
+});

@@ -165,7 +165,7 @@ function alRecibirNota(n) {
   fila.append(
     celda(momento.toFixed(3) + ' s', 'num tenue'),
     celda(nombreNota(n.midi), 'nota'),
-    celdaFuerza(n.velocidad, n.fuente),
+    celdaFuerza(n.velocidad, n.fuente, n.nivelDb),
     celdaDura,
     celdaDesajuste(desajuste),
   );
@@ -197,14 +197,20 @@ function celda(texto, clase) {
   return td;
 }
 
-function celdaFuerza(v, fuente) {
+function celdaFuerza(v, fuente, nivelDb) {
   const td = document.createElement('td');
   td.className = 'fuerza';
   const barra = document.createElement('span');
   barra.className = 'barrita';
   barra.style.setProperty('--v', (v ?? 0) / 127);
   td.append(barra, document.createTextNode(` ${v ?? '–'}${fuente === 'micro' ? '≈' : ''}`));
-  td.title = fuente === 'micro' ? 'Aproximada a partir del volumen' : 'Velocidad MIDI (1-127)';
+  if (nivelDb != null) {
+    const db = document.createElement('span');
+    db.className = 'tenue db';
+    db.textContent = ` ${Math.round(nivelDb)} dB`;
+    td.append(db);
+  }
+  td.title = fuente === 'micro' ? 'Aproximada a partir del volumen que oye el micro' : 'Velocidad MIDI (1-127)';
   return td;
 }
 
@@ -356,7 +362,7 @@ function terminarCalibracion() {
   $('calibrar-texto').textContent = `Hecho: retraso corregido ${nuevo} ms para ${fuente === 'micro' ? 'el micro' : fuente === 'midi' ? 'el cable' : 'la pantalla'}.`;
 }
 
-// ---------- Sensibilidad del micro ----------
+// ---------- Umbral del micro (dB por encima del ruido de fondo) ----------
 $('sensibilidad').value = ajustes.sensibilidad;
 $('sensibilidad-valor').textContent = `${ajustes.sensibilidad} dB`;
 $('sensibilidad').addEventListener('input', () => {
@@ -417,9 +423,23 @@ function dibujar() {
     if (l) {
       const pct = (db) => `${Math.max(0, Math.min(100, ((db + 90) / 90) * 100))}%`;
       $('medidor-barra').style.width = pct(l.rmsDb);
+      const umbral = entrada.analizador.seguidor.umbralAtaque;
+      $('medidor-fondo').hidden = $('medidor-umbral').hidden = l.fondoDb == null;
       if (l.fondoDb != null) {
         $('medidor-fondo').style.left = pct(l.fondoDb);
-        $('medidor-umbral').style.left = pct(entrada.analizador.seguidor.umbralAtaque);
+        $('medidor-umbral').style.left = pct(umbral);
+      }
+      // Cifras para afinar: se refrescan unas 4 veces por segundo para que se puedan leer.
+      const ahora = performance.now();
+      if (ahora - (dibujar.ultimasCifras ?? 0) > 250) {
+        dibujar.ultimasCifras = ahora;
+        dibujar.picoReciente = Math.max(l.rmsDb, (dibujar.picoReciente ?? -120) - 6);
+        $('medidor-cifras').textContent =
+          l.fondoDb == null
+            ? 'Midiendo el silencio… no toques un momento.'
+            : `Ahora ${Math.round(dibujar.picoReciente)} dB · ruido ${Math.round(l.fondoDb)} dB · umbral ${Math.round(umbral)} dB`;
+      } else {
+        dibujar.picoReciente = Math.max(l.rmsDb, dibujar.picoReciente ?? -120);
       }
     }
   }

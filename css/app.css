@@ -136,6 +136,8 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 .medidor-barra { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--bien); transition: width 60ms linear; }
 .medidor-marca { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--tenue); }
 .medidor-marca.umbral { background: var(--acento); }
+.cifras { font-variant-numeric: tabular-nums; }
+td .db { font-size: 0.8em; }
 
 /* ---------- Controles ---------- */
 .control { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; }
