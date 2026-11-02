@@ -54,14 +54,14 @@ function notaDerecha(m, t) {
 }
 const notaIzquierda = (m) => 4 * 12 + ESCALA[m % 7];
 
-/** Interpretación de los compases 9-12 a `ppm`, con cambios: {cambiar: {'11:1': +1}, pausaAntes12: s, soloDerecha} */
-function interpretacion({ ppm = 120, cambiar = {}, pausaAntes12 = 0, soloDerecha = false }) {
+/** Interpretación de los compases desde-hasta a `ppm`, con cambios: {cambiar: {'11:1': +1}, pausaAntes12: s, soloDerecha} */
+function interpretacion({ desde = 9, hasta = 12, ppm = 120, cambiar = {}, pausaAntes12 = 0, soloDerecha = false }) {
   const q = 60000 / ppm;
   const eventos = [];
   let t0 = 300;
-  for (let m = 9; m <= 12; m++) {
+  for (let m = desde; m <= hasta; m++) {
     if (m === 12) t0 += pausaAntes12 * 1000;
-    const inicio = t0 + (m - 9) * 4 * q;
+    const inicio = t0 + (m - desde) * 4 * q;
     for (let t = 0; t < 4; t++) {
       const midi = notaDerecha(m, t) + (cambiar[`${m}:${t}`] ?? 0);
       eventos.push({ ms: inicio + t * q, datos: [0x90, midi, 80] }, { ms: inicio + (t + 0.8) * q, datos: [0x80, midi, 0] });
@@ -110,6 +110,17 @@ try {
   await pagina.evaluate(() => window.pianobot.partitura.addEventListener('compas', (e) => window.__cursor(e.detail.compas)));
   await pagina.evaluate((ev) => window.__tocar(ev), interpretacion({ cambiar: { '11:1': 1, '11:2': -2 }, pausaAntes12: 1.5 }));
   comprobar([10, 11, 12].every((c) => cursores.includes(c)), `el cursor sigue por dónde vas (${[...new Set(cursores)].join(', ')})`);
+  // En directo, antes de que acabe el intento: notas coloreadas y la línea roja en marcha
+  await pagina.waitForTimeout(300);
+  const enDirecto = await pagina.evaluate(() => ({
+    acabado: !!window.pianobot.ultimoIntento,
+    falladas: document.querySelectorAll('#partitura .nota-fallada').length,
+    bien: document.querySelectorAll('#partitura .nota-bien').length,
+    linea: !window.pianobot.partitura.osmd.cursors[1].Hidden,
+  }));
+  comprobar(!enDirecto.acabado && enDirecto.falladas === 2 && enDirecto.bien >= 15,
+    `en directo (antes de acabar), las falladas en rojo y las demás en verde (${enDirecto.falladas} rojas, ${enDirecto.bien} verdes)`);
+  comprobar(enDirecto.linea, 'en directo, se ve la línea roja que sigue la nota'); 
   await pagina.waitForFunction(() => window.pianobot.ultimoIntento, null, { timeout: 8000 });
   const r = await pagina.evaluate(() => {
     const u = window.pianobot.ultimoIntento;
@@ -121,6 +132,7 @@ try {
   comprobar(fila(12, 'derecha').titubeos + fila(12, 'izquierda').titubeos === 1 && r.total.titubeos === 1, 'detecta el titubeo antes del compás 12');
   comprobar(r.total.tempo >= 115 && r.total.tempo <= 125, `tempo real ≈ 120 (${r.total.tempo})`);
   comprobar(fila(9, 'derecha').articulacion >= 75 && fila(9, 'derecha').articulacion <= 85, `articulación ≈ 80 % (${fila(9, 'derecha').articulacion})`);
+  comprobar(await pagina.evaluate(() => window.pianobot.partitura.osmd.cursors[1].Hidden), 'al acabar, la línea roja se esconde');
   const rojas = await pagina.$$eval('#partitura .nota-fallada', (els) => els.length);
   comprobar(rojas === 2, `las 2 notas falladas, en rojo en la partitura (${rojas})`);
   comprobar(await pagina.isVisible('#tarjeta-intento'), 'se ve la tarjeta «Último intento»');
@@ -132,7 +144,11 @@ try {
 
   // Intento 2: solo mano derecha, sin fallos, con metrónomo
   await pagina.selectOption('#mano', 'derecha');
-  await pagina.click('#metro-boton');
+  // El metrónomo pequeño de la barra de la partitura
+  await pagina.click('#mini-mas');
+  comprobar((await pagina.textContent('#mini-tempo')) === '62' && (await pagina.textContent('#tempo-numero')) === '62', 'el + de arriba sube el tempo (y el metrónomo grande lo refleja)');
+  await pagina.click('#mini-metro');
+  comprobar(await pagina.evaluate(() => window.pianobot.metronomo.sonando), 'el ▶ de arriba arranca el metrónomo');
   await pagina.evaluate(() => { window.pianobot.metronomo.ponerTempo(120); });
   await pagina.evaluate(() => { window.pianobot.ultimoIntentoAnterior = window.pianobot.ultimoIntento; });
   await pagina.evaluate((ev) => window.__tocar(ev), interpretacion({ soloDerecha: true }));
@@ -141,6 +157,31 @@ try {
   comprobar(r2.notas === 16 && r2.bien === 16 && r2.falladas === 0 && r2.omitidas === 0, 'solo mano derecha: 16 de 16, sin contar la izquierda como omitida');
   comprobar(r2.referencia === 'metrónomo', 'con el metrónomo en marcha, el desajuste se mide contra él');
   comprobar((await pagina.$$eval('#partitura .nota-fallada', (els) => els.length)) === 0, 'un intento nuevo borra las marcas del anterior');
+
+  // Fragmento largo (compases 1-16, letra grande): la hoja baja sola mientras tocas
+  await pagina.click('#mini-metro');
+  await pagina.selectOption('#mano', 'ambas');
+  for (let i = 0; i < 3; i++) await pagina.click('#zoom-mas');
+  await pagina.fill('#frag-desde', '1');
+  await pagina.dispatchEvent('#frag-desde', 'change');
+  await pagina.fill('#frag-hasta', '16');
+  await pagina.dispatchEvent('#frag-hasta', 'change');
+  await pagina.evaluate(() => {
+    const hoja = document.querySelector('#partitura');
+    window.__maxScroll = 0;
+    hoja.addEventListener('scroll', () => { window.__maxScroll = Math.max(window.__maxScroll, hoja.scrollTop); });
+  });
+  const altura = await pagina.evaluate(() => ({ hoja: document.querySelector('#partitura').clientHeight, total: document.querySelector('#partitura').scrollHeight }));
+  await pagina.evaluate((ev) => window.__tocar(ev), interpretacion({ desde: 1, hasta: 16, ppm: 240 }));
+  const bajada = await pagina.evaluate(() => window.__maxScroll);
+  comprobar(altura.total > altura.hoja && bajada > 100, `con 16 compases la hoja baja sola (contenido ${altura.total}px en ${altura.hoja}px, bajó ${Math.round(bajada)}px)`);
+  const lineaAbajo = await pagina.evaluate(() => {
+    const hoja = document.querySelector('#partitura');
+    const el = window.pianobot.partitura.osmd.cursors[1].cursorElement;
+    return el.offsetTop >= hoja.scrollTop && el.offsetTop + el.offsetHeight <= hoja.scrollTop + hoja.clientHeight + 1;
+  });
+  comprobar(lineaAbajo, 'la línea roja queda a la vista al llegar al último sistema');
+  if (capturas) await pagina.screenshot({ path: join(capturas, 'seguimiento.png') });
 
   await pagina.click('#corregir');
   comprobar((await pagina.getAttribute('#corregir', 'aria-pressed')) === 'false', 'se desactiva');

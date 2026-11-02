@@ -1,5 +1,6 @@
 // La partitura en pantalla: pinta un fragmento de la pieza (del compás n al m) con
-// OpenSheetMusicDisplay (OSMD) y marca con un cursor el compás en el que vas.
+// OpenSheetMusicDisplay (OSMD). Dos cursores: uno sombrea el compás en el que vas y otro, una línea roja
+// fina, sigue la nota por la que vas mientras tocas. La hoja tiene su propio scroll y baja sola.
 // OSMD se carga como script clásico (js/vendor) y queda en window.opensheetmusicdisplay.
 
 export class Partitura extends EventTarget {
@@ -36,7 +37,10 @@ export class Partitura extends EventTarget {
       measureNumberInterval: 1,
       useXMLMeasureNumbers: true,
       followCursor: false,
-      cursorsOptions: [{ type: OSMD.CursorType.CurrentArea, color: '#e0775e', alpha: 0.18, follow: false }],
+      cursorsOptions: [
+        { type: OSMD.CursorType.CurrentArea, color: '#e0775e', alpha: 0.18, follow: false },
+        { type: OSMD.CursorType.ThinLeft, color: '#d1301f', alpha: 1, follow: false },
+      ],
     });
     await this.osmd.load(xml);
     this.dispatchEvent(new CustomEvent('cargada', { detail: { compases: this.numCompases } }));
@@ -62,15 +66,62 @@ export class Partitura extends EventTarget {
   }
 
   /** Mueve el cursor al principio de un compás del fragmento. */
-  irACompas(numero) {
+  irACompas(numero, { desplazar = true } = {}) {
     numero = Math.max(this.desde, Math.min(this.hasta, numero));
-    const cursor = this.osmd.cursor;
+    const cursor = this.osmd.cursors[0];
     cursor.show();
     cursor.reset();
     while (!cursor.iterator.EndReached && cursor.iterator.CurrentMeasureIndex < numero - 1) cursor.next();
     cursor.update();
     this.compas = numero;
+    if (desplazar) this.#aLaVista(cursor.cursorElement);
     this.dispatchEvent(new CustomEvent('compas', { detail: { compas: numero } }));
+  }
+
+  /**
+   * Pone la línea roja en un momento de la pieza (en negras desde el principio) y baja la hoja si hace falta.
+   * Avanza desde donde estaba (rápido mientras se toca) y solo vuelve al principio si hay que ir hacia atrás.
+   */
+  seguirA(negras) {
+    const linea = this.osmd.cursors[1];
+    if (!linea) return;
+    const momento = () => linea.iterator.currentTimeStamp.RealValue * 4;
+    if (linea.Hidden || momento() > negras + 1e-6) {
+      linea.show();
+      linea.reset();
+    }
+    while (!linea.iterator.EndReached && momento() < negras - 1e-6) linea.next();
+    linea.update();
+    this.#aLaVista(linea.cursorElement);
+  }
+
+  ocultarLinea() {
+    this.osmd?.cursors[1]?.hide();
+  }
+
+  /** Baja (o sube) la hoja para que se vea el sistema donde está el cursor, con un poco de margen arriba. */
+  #aLaVista(el) {
+    if (!el) return;
+    const hoja = this.contenedor;
+    const arriba = el.offsetTop;
+    const abajo = arriba + el.offsetHeight;
+    if (arriba < hoja.scrollTop || abajo > hoja.scrollTop + hoja.clientHeight) {
+      hoja.scrollTo({ top: Math.max(0, arriba - 16) });
+    }
+  }
+
+  /**
+   * Colorea las notas según un estado: estadoDe(graphicalNote) → 'bien' | 'fallada' | 'omitida' | undefined.
+   * Usa las clases nota-bien, nota-fallada y nota-omitida.
+   */
+  pintarEstados(estadoDe) {
+    const clases = ['nota-bien', 'nota-fallada', 'nota-omitida'];
+    for (const nota of this.notasPintadas()) {
+      const g = nota.getSVGGElement?.();
+      if (!g) continue;
+      const estado = estadoDe(nota);
+      for (const c of clases) g.classList.toggle(c, c === `nota-${estado}`);
+    }
   }
 
   /** Vuelve a cargar la partitura (p. ej. con digitación nueva) sin perder fragmento ni cursor. */

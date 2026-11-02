@@ -48,6 +48,28 @@
           <button type="button" class="paso" id="zoom-mas" aria-label="Más grande">A+</button>
         </div>
       </div>
+      <div class="barra-practica" role="toolbar" aria-label="Práctica">
+        <button type="button" class="secundario digitar" id="digitar" aria-pressed="false">✍️ Digitar</button>
+        <span class="guardado" id="guardado" aria-live="polite" hidden></span>
+        <button type="button" class="secundario corregir" id="corregir" aria-pressed="false">🎯 Corregir</button>
+        <select id="mano" aria-label="Mano">
+          <option value="ambas">Las dos manos</option>
+          <option value="derecha">Mano derecha</option>
+          <option value="izquierda">Mano izquierda</option>
+        </select>
+        <div class="grupo" role="group" aria-label="Compás">
+          <button type="button" class="paso" id="cursor-anterior" aria-label="Compás anterior">‹</button>
+          <span class="etiqueta">Compás <b id="cursor-compas">–</b></span>
+          <button type="button" class="paso" id="cursor-siguiente" aria-label="Compás siguiente">›</button>
+        </div>
+        <div class="grupo mini-metro" role="group" aria-label="Metrónomo">
+          <button type="button" class="paso" id="mini-menos" aria-label="Bajar tempo">−</button>
+          <span class="etiqueta"><b id="mini-tempo">60</b> ppm</span>
+          <button type="button" class="paso" id="mini-mas" aria-label="Subir tempo">+</button>
+          <button type="button" class="paso mini-boton" id="mini-metro" aria-label="Metrónomo" aria-pressed="false">♩ ▶</button>
+        </div>
+      </div>
+      <p class="estado-partitura tenue" id="partitura-estado" aria-live="polite">Cargando la partitura…</p>
       <div class="sin-conexion" id="sin-conexion" hidden>
         <p>Las partituras están en tu Google Drive. Conecta la app una vez y se quedan guardadas en la tablet.</p>
         <button type="button" class="primario" id="conectar">Conectar con Drive</button>
@@ -64,25 +86,12 @@
           <button type="button" class="dedo borrar" data-dedo="" aria-label="Quitar el dedo">✕</button>
         </div>
       </div>
-      <div class="pie-partitura">
-        <button type="button" class="paso" id="cursor-anterior" aria-label="Compás anterior">‹</button>
-        <span>Compás <b id="cursor-compas">–</b></span>
-        <button type="button" class="paso" id="cursor-siguiente" aria-label="Compás siguiente">›</button>
-        <button type="button" class="secundario digitar" id="digitar" aria-pressed="false">✍️ Digitar</button>
-        <button type="button" class="secundario corregir" id="corregir" aria-pressed="false">🎯 Corregir</button>
-        <select id="mano" aria-label="Mano">
-          <option value="ambas">Las dos manos</option>
-          <option value="derecha">Mano derecha</option>
-          <option value="izquierda">Mano izquierda</option>
-        </select>
-        <span class="tenue" id="partitura-estado">Cargando la partitura…</span>
-      </div>
     </section>
 
     <section class="tarjeta intento" id="tarjeta-intento" aria-labelledby="t-intento" hidden>
       <div class="cabecera">
         <h2 id="t-intento">Último intento</h2>
-        <span class="leyenda"><span class="muestra fallada"></span> fallada <span class="muestra omitida"></span> omitida</span>
+        <span class="leyenda"><span class="muestra bien"></span> bien <span class="muestra fallada"></span> fallada <span class="muestra omitida"></span> omitida</span>
       </div>
       <p class="resumen-intento" id="intento-resumen"></p>
       <div class="tabla-envoltorio">

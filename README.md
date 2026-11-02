@@ -18,9 +18,14 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   metrónomo si suena, si no contra tu propio pulso), tempo real, articulación (% del valor escrito que mantienes la
   tecla) y pedal (aparte: % del compás pisado y veces que se pisa). Mientras tocas, el cursor sigue por dónde vas.
   Se queda esperando el siguiente intento.
+- **Seguimiento en directo:** mientras tocas con «Corregir», una línea roja sigue la nota por la que vas, las notas se
+  colorean al momento (verde bien, rojo fallada, naranja saltada) y la hoja baja sola al pasar de sistema.
+- **Controles arriba:** Digitar, Corregir, mano, compás y un metrónomo mínimo (− tempo + ▶) encima de la partitura,
+  que tiene su propio scroll; no hace falta bajar la página para llegar a ellos.
 - **Digitación en la tablet:** botón **✍️ Digitar**, tocas una nota y eliges el dedo (1-5, o ✕ para quitarlo); salta
   sola a la siguiente nota de esa mano, así que un pasaje se digita pulsando números seguidos. Se guarda en el propio
-  MusicXML de Drive (se ve también en MuseScore); sin conexión queda en la tablet y se sube después.
+  MusicXML de Drive (se ve también en MuseScore); sin conexión queda en la tablet y se sube después. Junto a
+  «Digitar» se ve si está guardado («✓ Guardado en Drive» o «⚠ Guardado en la tablet»).
 - **Lee el piano por cable (MIDI por USB):** cada tecla por separado, con su momento, su fuerza (1-127) y cuánto
   la mantienes. Recoge acordes, las dos manos a la vez y el pedal.
 - **Nota grande:** enseña todas las teclas que suenan a la vez y avisa cuando pisas el pedal.

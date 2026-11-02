@@ -127,7 +127,7 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
   max-width: min(60vw, 32em); text-overflow: ellipsis; cursor: pointer;
 }
 .selector-pieza:hover, .selector-pieza:focus { border-color: var(--linea); }
-.fragmento, .zoom, .pie-partitura { display: flex; align-items: center; gap: 8px; }
+.fragmento, .zoom { display: flex; align-items: center; gap: 8px; }
 .fragmento label { display: flex; align-items: center; gap: 6px; color: var(--tenue); }
 .fragmento input {
   width: 3.6em; text-align: center; font-size: 1.1rem; font-variant-numeric: tabular-nums; color: var(--tinta);
@@ -138,7 +138,20 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
   cursor: pointer; font-weight: 600; touch-action: manipulation;
 }
 /* La partitura va siempre sobre «papel» claro, también en modo oscuro: se lee mejor en el atril. */
-.hoja { background: #fffdf8; border-radius: 10px; border: 1px solid var(--linea); min-height: 200px; overflow-x: auto; color: #111; }
+/* La hoja tiene su propio scroll (cabe en la pantalla con los controles a la vista) y baja sola al tocar. */
+.hoja {
+  background: #fffdf8; border-radius: 10px; border: 1px solid var(--linea); min-height: 200px; color: #111;
+  position: relative; overflow: auto; max-height: calc(100dvh - 220px); scroll-behavior: smooth; overscroll-behavior: contain;
+}
+.barra-practica { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.barra-practica .grupo { display: flex; align-items: center; gap: 6px; }
+.barra-practica .etiqueta { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mini-metro { margin-left: auto; }
+.mini-boton[aria-pressed='true'] { background: var(--acento); color: var(--acento-tinta); border-color: var(--acento); }
+.estado-partitura { margin: 0; font-size: 0.85rem; min-height: 1.2em; }
+.guardado { font-size: 0.85rem; color: var(--tenue); white-space: nowrap; }
+.guardado.ok { color: var(--bien); }
+.guardado.aviso { color: var(--regular); }
 .hoja svg { display: block; }
 .sin-conexion { padding: 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .sin-conexion p { margin: 0; color: var(--tenue); max-width: 40em; }
@@ -163,6 +176,7 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 /* Nota elegida para digitar: en color sobre el papel claro */
 .hoja .nota-elegida path, .hoja .nota-elegida rect { fill: #1f6fd1; stroke: #1f6fd1; }
 /* Corrección: notas falladas y omitidas del último intento */
+.hoja .nota-bien path, .hoja .nota-bien rect { fill: #2a8a4a; stroke: #2a8a4a; }
 .hoja .nota-fallada path, .hoja .nota-fallada rect { fill: #d1301f; stroke: #d1301f; }
 .hoja .nota-omitida path, .hoja .nota-omitida rect { fill: #e08a00; stroke: #e08a00; }
 .corregir { min-height: 44px; padding: 8px 14px; }
@@ -171,14 +185,13 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 .resumen-intento { margin: 0 0 10px; }
 .leyenda { color: var(--tenue); font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
 .muestra { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.muestra.bien { background: #2a8a4a; margin-left: 8px; }
 .muestra.fallada { background: #d1301f; margin-left: 8px; }
 .muestra.omitida { background: #e08a00; margin-left: 8px; }
 .intento td.cuenta { text-align: right; }
 .intento td.hay { color: var(--mal); font-weight: 600; }
 .intento tr.primera-mano td { border-top: 2px solid var(--linea); }
-.pie-partitura b { font-variant-numeric: tabular-nums; }
-.pie-partitura { flex-wrap: wrap; }
-.pie-partitura #partitura-estado { margin-left: auto; font-size: 0.85rem; }
+
 
 /* ---------- Ahora ---------- */
 .fila-estado { display: flex; align-items: center; gap: 10px; color: var(--tenue); font-size: 0.95rem; }

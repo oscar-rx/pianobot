@@ -294,6 +294,9 @@ function pintarMetronomo() {
   $('volumen').value = metronomo.volumen;
   $('sonido').value = metronomo.sonido;
   $('metro-boton').textContent = metronomo.sonando ? '■ Parar' : '▶ Arrancar';
+  $('mini-tempo').textContent = metronomo.ppm;
+  $('mini-metro').textContent = metronomo.sonando ? '♩ ■' : '♩ ▶';
+  $('mini-metro').setAttribute('aria-pressed', String(metronomo.sonando));
   const puntos = [];
   for (let i = 0; i < metronomo.pulsosPorCompas; i++) {
     const p = document.createElement('span');
@@ -313,8 +316,18 @@ const cambiarTempo = (ppm) => {
     metronomo.arrancar();
   }
 };
-$('tempo-menos').addEventListener('click', () => cambiarTempo(metronomo.ppm - (metronomo.ppm > 100 ? 4 : 2)));
-$('tempo-mas').addEventListener('click', () => cambiarTempo(metronomo.ppm + (metronomo.ppm >= 100 ? 4 : 2)));
+const bajarTempo = () => cambiarTempo(metronomo.ppm - (metronomo.ppm > 100 ? 4 : 2));
+const subirTempo = () => cambiarTempo(metronomo.ppm + (metronomo.ppm >= 100 ? 4 : 2));
+$('tempo-menos').addEventListener('click', bajarTempo);
+$('tempo-mas').addEventListener('click', subirTempo);
+// El mismo metrónomo, en pequeño, en la barra de la partitura
+$('mini-menos').addEventListener('click', bajarTempo);
+$('mini-mas').addEventListener('click', subirTempo);
+$('mini-metro').addEventListener('click', async () => {
+  await activarAudio();
+  if (metronomo.sonando) metronomo.parar();
+  else metronomo.arrancar();
+});
 $('tempo').addEventListener('input', () => {
   $('tempo-numero').textContent = $('tempo').value;
 });
@@ -527,8 +540,12 @@ async function abrirPieza(pieza, yaMostrado = null) {
     estadoPartitura('Subiendo a Drive los cambios guardados en la tablet…');
     try {
       await servidor.guardarPartitura(pieza.id, mostrado);
+      indicarGuardado('guardado');
     } catch (err) {
-      if (esta === carga) estadoPartitura(`Cambios guardados en la tablet; aún no se han podido subir a Drive (${err.message})`);
+      if (esta === carga) {
+        estadoPartitura(`Cambios guardados en la tablet; aún no se han podido subir a Drive (${err.message})`);
+        indicarGuardado('tablet', err.message);
+      }
       return;
     }
     if (esta !== carga) return;
@@ -682,6 +699,22 @@ function escribirDedo(dedo) {
   clearTimeout(dig.guardar);
   dig.guardar = setTimeout(guardarDigitacionYa, 2500);
   estadoPartitura('Cambios sin guardar…');
+  indicarGuardado('cambios');
+}
+
+/** Indicador junto a «Digitar»: 'cambios' | 'guardando' | 'guardado' | 'tablet' | null (oculto) */
+function indicarGuardado(estado, detalle = '') {
+  const el = $('guardado');
+  const textos = {
+    cambios: '• Sin guardar',
+    guardando: 'Guardando…',
+    guardado: `✓ Guardado en Drive ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
+    tablet: '⚠ Guardado en la tablet; falta subirlo a Drive',
+  };
+  el.hidden = !estado;
+  el.textContent = textos[estado] ?? '';
+  el.title = detalle;
+  el.className = `guardado${estado === 'guardado' ? ' ok' : estado === 'tablet' ? ' aviso' : ''}`;
 }
 
 async function guardarDigitacionYa() {
@@ -690,12 +723,17 @@ async function guardarDigitacionYa() {
   dig.cambios = false;
   const id = piezaActual.id;
   estadoPartitura('Guardando en Drive…');
+  indicarGuardado('guardando');
   try {
     await servidor.guardarPartitura(id, xmlActual);
-    if (!dig.cambios) estadoPartitura('Digitación guardada en Drive');
+    if (!dig.cambios) {
+      estadoPartitura('Digitación guardada en Drive');
+      indicarGuardado('guardado');
+    }
   } catch (err) {
     console.warn(err);
     estadoPartitura(`Guardada en la tablet; se subirá a Drive cuando se pueda (${err.message})`);
+    indicarGuardado('tablet', err.message);
   }
 }
 
@@ -728,9 +766,12 @@ const textoMano = () => ({ ambas: '', derecha: ' con la mano derecha', izquierda
 
 function limpiarMarcas() {
   if (!partitura.osmd) return;
-  partitura.marcar('nota-fallada', () => false);
-  partitura.marcar('nota-omitida', () => false);
+  partitura.pintarEstados(() => undefined);
+  partitura.ocultarLinea();
 }
+
+// Dónde empieza el fragmento (en negras desde el principio de la pieza), para mover la línea roja
+const inicioFragmento = () => (dig.indice.compases.find((c) => c.numero === partitura.desde) ?? dig.indice.compases[0]).inicio;
 
 async function activarCorreccion(activo) {
   if (activo && (!dig.indice || !partitura.osmd)) {
@@ -762,13 +803,46 @@ grabador.addEventListener('inicio', () => {
   estadoPartitura('Escuchando…');
 });
 
-// En directo: el cursor sigue el compás por el que vas
+// En directo: la línea roja sigue la nota por la que vas, la hoja baja sola y las notas se colorean
+// según las tocas (verde bien, rojo fallada; naranja las que te has saltado). Como mucho cada 120 ms.
+let seguimientoPendiente = null;
 grabador.addEventListener('nota', () => {
-  if (!esperadasDelIntento?.length) return;
-  const { pares } = alinear(esperadasDelIntento, grabador.notas, { finLibre: true });
-  const ultimo = pares.at(-1)?.e;
-  if (ultimo && ultimo.compas !== partitura.compas) partitura.irACompas(ultimo.compas);
+  if (seguimientoPendiente) return;
+  seguimientoPendiente = setTimeout(() => {
+    seguimientoPendiente = null;
+    seguirIntento();
+  }, 0);
 });
+
+let ultimoSeguimiento = 0;
+function seguirIntento() {
+  const E = esperadasDelIntento;
+  if (!E?.length || !grabador.grabando) return;
+  const ahora = performance.now();
+  if (ahora - ultimoSeguimiento < 120) {
+    seguimientoPendiente = setTimeout(() => {
+      seguimientoPendiente = null;
+      seguirIntento();
+    }, 120);
+    return;
+  }
+  ultimoSeguimiento = ahora;
+  const { pares } = alinear(E, grabador.notas, { finLibre: true });
+  const ultimo = pares.at(-1)?.e;
+  if (!ultimo) return;
+  const hechas = E.filter((e) => e.pos <= ultimo.pos + 1e-6);
+  const compases = compasesDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta });
+  const r = analizar({ esperadas: hechas, compases, tocadas: grabador.notas });
+  const estados = new Map();
+  for (const [clave, x] of r.notas) {
+    // Una omitida solo se marca cuando ya has pasado de largo (no la que estás a punto de tocar)
+    if (x.estado === 'omitida' && x.e.pos >= ultimo.pos - 0.25) continue;
+    estados.set(clave, x.estado);
+  }
+  partitura.pintarEstados((gn) => estados.get(claveOsmd(gn.sourceNote)));
+  if (ultimo.compas !== partitura.compas) partitura.irACompas(ultimo.compas, { desplazar: false });
+  partitura.seguirA(inicioFragmento() + ultimo.pos);
+}
 
 grabador.addEventListener('intento', (e) => {
   const esperadas = esperadasDelIntento ?? esperadasDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano });
@@ -778,9 +852,10 @@ grabador.addEventListener('intento', (e) => {
   ultimoIntento = { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, metronomo: pulso?.ppm ?? null, ...resultado };
   esperadasDelIntento = null;
   pintarIntento(ultimoIntento);
-  const estado = (gn) => resultado.notas.get(claveOsmd(gn.sourceNote))?.estado;
-  partitura.marcar('nota-fallada', (gn) => estado(gn) === 'fallada');
-  partitura.marcar('nota-omitida', (gn) => estado(gn) === 'omitida');
+  clearTimeout(seguimientoPendiente);
+  seguimientoPendiente = null;
+  partitura.ocultarLinea();
+  partitura.pintarEstados((gn) => resultado.notas.get(claveOsmd(gn.sourceNote))?.estado);
   partitura.irACompas(partitura.desde);
   estadoPartitura('Corregido. Toca otra vez cuando quieras.');
 });
@@ -832,9 +907,15 @@ function pintarIntento(r) {
   $('tarjeta-intento').hidden = false;
 }
 
-// Si la app se cierra o pasa a segundo plano, se guarda lo pendiente.
+// Si la app se cierra o pasa a segundo plano, se guarda lo pendiente (y si aún no ha dado tiempo, se avisa).
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') guardarDigitacionYa();
+});
+window.addEventListener('beforeunload', (e) => {
+  if (!dig.cambios) return;
+  guardarDigitacionYa();
+  e.preventDefault();
+  e.returnValue = '';
 });
 
 // Añadir una partitura desde la tablet: se sube a la carpeta de Drive y queda en el catálogo.

@@ -110,6 +110,7 @@ try {
   const guardado = dedosEn(estado.guardados.at(-1));
   comprobar(JSON.stringify(guardado) === JSON.stringify(['1:D4=1', '1:E4=2', '1:F4=3', '1:G4=4', '1:D3=5']),
     `se guarda en Drive en las notas correctas (${guardado.join(' ')})`);
+  comprobar((await pagina.textContent('#guardado')).startsWith('✓ Guardado en Drive'), 'junto a «Digitar» se ve «✓ Guardado en Drive»');
   if (capturas) await pagina.screenshot({ path: join(capturas, 'digitacion.png') });
 
   // Corregir y borrar: tocar Mi4 (dedo 2) → 3, y Fa4 (dedo 3) → ✕
@@ -133,7 +134,7 @@ try {
   await pagina.click('.dedo[data-dedo="2"]');
   await pagina.click('#digitar');
   await pagina.waitForFunction(() => /Guardada en la tablet/.test(document.querySelector('#partitura-estado').textContent), null, { timeout: 8000 });
-  comprobar(true, 'sin conexión: avisa de que queda guardada en la tablet');
+  comprobar((await pagina.textContent('#guardado')).startsWith('⚠ Guardado en la tablet'), 'sin conexión: avisa de que queda guardada en la tablet');
   await pagina.reload();
   await cargada();
   const dedosTablet = await pagina.evaluate(() => [...window.pianobot.digitacion.indice.notas].filter((n) => n.el.querySelector('fingering')).length);
