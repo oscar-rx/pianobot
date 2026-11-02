@@ -4,8 +4,9 @@ El puente entre la web (GitHub Pages) y tu Google Drive. Va pegado al Sheet «pi
 aplicación web. Ahora mismo sirve el catálogo de piezas y las partituras y recibe las que subes desde la app;
 en la fase 4 llamará a Claude.
 
-- `Codigo.gs`: el código. Se copia tal cual en el editor de Apps Script.
-- `appsscript.json`: la configuración del proyecto (para cuando se suba con clasp).
+- `Codigo.gs`: el código.
+- `appsscript.json`: la configuración del proyecto.
+- `.clasp.json` y `.claspignore`: para subirlo con clasp (ver «Cuando cambie el código»).
 
 ## Dónde están las cosas en Drive
 
@@ -46,5 +47,15 @@ pongas la URL ni el token en el repo ni los compartas.
 
 ## Cuando cambie el código
 
-Pega el `Codigo.gs` nuevo, guarda y ve a **Implementar → Gestionar implementaciones** → lápiz → Versión:
-**Nueva versión** → **Implementar**. Así la URL sigue siendo la misma y la tablet no hay que tocarla.
+Lo sube Claude con clasp desde la sesión: `herramientas/subir-apps-script.sh`. Pasa las pruebas, sube
+`Codigo.gs` y `appsscript.json` (los únicos que deja pasar `.claspignore`) y publica una versión nueva en la misma
+implementación, así que la URL y el token no cambian.
+
+En cada sesión nueva de Claude hace falta autorizar clasp una vez: Claude te pasa un enlace de Google, lo abres,
+aceptas, y le pegas la dirección `http://localhost:8888/?…` a la que te manda el navegador (dice «No se puede
+acceder a este sitio»: es normal). La autorización se queda solo en esa sesión, nunca en GitHub.
+
+`.clasp.json` enlaza esta carpeta con el proyecto «pianobot» (el que va pegado al Sheet).
+
+Si alguna vez hiciera falta a mano: pega el `Codigo.gs` nuevo en el editor, guarda y ve a **Deploy → Manage
+deployments** → lápiz → Version: **New version** → **Deploy**.
