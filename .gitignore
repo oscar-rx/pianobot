@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+*.log
+# Partituras compradas: van en Drive, nunca al repo (GitHub Pages es público)
+piezas/privadas/
+.clasprc.json

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16171a" media="(prefers-color-scheme: dark)">
+  <title>pianobot</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='5' width='26' height='22' rx='3' fill='%23fff' stroke='%23222' stroke-width='2'/%3E%3Crect x='9' y='6' width='4' height='12' fill='%23222'/%3E%3Crect x='19' y='6' width='4' height='12' fill='%23222'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">pianobot <span class="fase">fase 1 · oír</span></div>
+
+    <div class="fuentes" role="radiogroup" aria-label="Cómo escucha la app">
+      <button type="button" role="radio" data-fuente="micro">🎙️ Micrófono</button>
+      <button type="button" role="radio" data-fuente="midi">🎹 Piano (cable)</button>
+      <button type="button" role="radio" data-fuente="pantalla">⌨️ Pantalla</button>
+    </div>
+
+    <button type="button" id="gasto" class="gasto" title="Gasto de la API de Claude">
+      <span class="gasto-etiqueta">API</span>
+      <span>sesión <b id="gasto-sesion">$0.00</b></span>
+      <span>mes <b id="gasto-mes">$0.00</b></span>
+    </button>
+  </header>
+
+  <div id="aviso-gasto" class="aviso" hidden></div>
+
+  <main class="rejilla">
+    <section class="tarjeta ahora" aria-labelledby="t-ahora">
+      <h2 id="t-ahora" class="oculto">Lo que suena</h2>
+      <div class="fila-estado">
+        <span id="estado-punto" class="punto"></span>
+        <span id="estado-texto">Elige cómo escuchar y pulsa Empezar.</span>
+      </div>
+      <div class="nota-grande" id="nota-actual" aria-live="polite">—</div>
+      <div class="nota-sub" id="nota-sub">&nbsp;</div>
+
+      <div id="bloque-micro" class="bloque-micro" hidden>
+        <div class="medidor" aria-hidden="true">
+          <div class="medidor-barra" id="medidor-barra"></div>
+          <div class="medidor-marca fondo" id="medidor-fondo" title="Ruido de fondo"></div>
+          <div class="medidor-marca umbral" id="medidor-umbral" title="Umbral para contar una nota"></div>
+        </div>
+        <label class="control">
+          <span>Sensibilidad</span>
+          <input type="range" id="sensibilidad" min="4" max="30" step="1">
+          <output id="sensibilidad-valor"></output>
+        </label>
+        <p class="ayuda">Una nota cada vez: una mano y sin pedal. Pon la tablet cerca del piano y el piano con su altavoz.</p>
+      </div>
+
+      <button type="button" id="empezar" class="primario">Empezar</button>
+    </section>
+
+    <section class="tarjeta metronomo" aria-labelledby="t-metro">
+      <h2 id="t-metro">Metrónomo</h2>
+      <div class="tempo">
+        <button type="button" class="redondo" id="tempo-menos" aria-label="Bajar tempo">−</button>
+        <div class="tempo-valor"><b id="tempo-numero">60</b><span>ppm</span></div>
+        <button type="button" class="redondo" id="tempo-mas" aria-label="Subir tempo">+</button>
+      </div>
+      <input type="range" id="tempo" min="30" max="160" step="1" aria-label="Tempo">
+      <div class="pulsos" id="pulsos" aria-hidden="true"></div>
+      <div class="ajustes-metro">
+        <label class="control"><span>Compás</span>
+          <select id="compas">
+            <option value="2">2 pulsos</option>
+            <option value="3">3 pulsos</option>
+            <option value="4">4 pulsos</option>
+          </select>
+        </label>
+        <label class="control"><span>Medir contra</span>
+          <select id="subdivision">
+            <option value="1">negras</option>
+            <option value="2">corcheas</option>
+            <option value="4">semicorcheas</option>
+          </select>
+        </label>
+        <label class="control"><span>Volumen</span>
+          <input type="range" id="volumen" min="0" max="1" step="0.05">
+        </label>
+      </div>
+      <div class="botones">
+        <button type="button" id="metro-boton" class="primario">▶ Arrancar</button>
+        <button type="button" id="calibrar" class="secundario" title="Toca una nota con cada clic para medir el retraso del sistema">Calibrar retraso</button>
+      </div>
+      <p class="ayuda" id="calibrar-texto"></p>
+    </section>
+
+    <section class="tarjeta escala" aria-labelledby="t-escala">
+      <div class="cabecera">
+        <h2 id="t-escala">Prueba de escala</h2>
+        <select id="escala" aria-label="Escala"></select>
+        <button type="button" id="escala-reiniciar" class="secundario">Otra vez</button>
+      </div>
+      <div class="chips" id="escala-chips"></div>
+      <p class="resumen" id="escala-resumen">Toca la escala subiendo y bajando. Mejor con el metrónomo a 60 y midiendo contra negras.</p>
+    </section>
+
+    <section class="tarjeta registro" aria-labelledby="t-registro">
+      <div class="cabecera">
+        <h2 id="t-registro">Notas</h2>
+        <span class="contador" id="registro-cuenta">0</span>
+        <button type="button" id="registro-borrar" class="secundario">Borrar</button>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>Momento</th><th>Nota</th><th>Fuerza</th><th>Dura</th><th>Desajuste</th></tr>
+          </thead>
+          <tbody id="registro"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="teclado" class="teclado" hidden></div>
+
+  <dialog id="dialogo-gasto">
+    <form method="dialog">
+      <h2>Gasto de la API de Claude</h2>
+      <p>Lo que llevas gastado con el profe. La API se paga aparte de la suscripción Pro.</p>
+      <dl class="desglose" id="gasto-desglose"></dl>
+      <label class="control"><span>Avisarme si el mes pasa de</span>
+        <span class="dolares">$<input type="number" id="gasto-tope" min="0" step="1" inputmode="decimal"></span>
+      </label>
+      <p class="ayuda">Esto solo avisa. Pon también un límite de gasto mensual en la Claude Console
+        (en los límites de la organización): así no se pasa aunque la app falle.</p>
+      <p class="ayuda" id="gasto-sin-llamadas">Todavía no hay llamadas: el profe llega en la fase 4.</p>
+      <div class="botones"><button class="primario" value="ok">Hecho</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

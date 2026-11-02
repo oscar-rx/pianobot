@@ -1,0 +1,11 @@
+{
+  "name": "pianobot",
+  "private": true,
+  "type": "module",
+  "description": "Profe de piano: la tablet escucha y enseña, Claude decide.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "e2e": "node tests/e2e/micro.e2e.mjs",
+    "servir": "node herramientas/servidor.mjs"
+  }
+}
