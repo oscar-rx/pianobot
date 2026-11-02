@@ -1,0 +1,65 @@
+# Sube el Apps Script (apps-script/) a Google con clasp y actualiza la aplicación web publicada.
+# La URL de la app web no cambia: se publica una versión nueva en la misma implementación.
+#
+# Secretos del repo (Settings → Secrets and variables → Actions):
+#   CLASPRC_JSON              credenciales de clasp (el contenido de ~/.clasprc.json tras «clasp login»)
+#   APPS_SCRIPT_DEPLOYMENT_ID ID de la implementación de la aplicación web (está en su URL: /macros/s/<ID>/exec)
+name: Apps Script
+
+on:
+  push:
+    branches: [claude/jolly-lamport-ytnces]
+    paths: ['apps-script/**', '.github/workflows/apps-script.yml']
+  workflow_dispatch:
+
+concurrency: apps-script
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pruebas (no se sube nada si fallan)
+        run: npm test
+
+      # Mientras no estén los secretos y apps-script/.clasp.json, se avisa y no se sube nada.
+      - name: Comprobar la configuración
+        id: config
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+          DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
+        run: |
+          if [ -z "$CLASPRC" ] || [ -z "$DEPLOYMENT_ID" ] || [ ! -f apps-script/.clasp.json ]; then
+            echo "::warning::Falta configurar la subida automática (secretos CLASPRC_JSON y APPS_SCRIPT_DEPLOYMENT_ID, y apps-script/.clasp.json). No se sube nada."
+            echo "listo=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "listo=si" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Credenciales de clasp
+        if: steps.config.outputs.listo == 'si'
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          printf '%s' "$CLASPRC" > ~/.clasprc.json
+          chmod 600 ~/.clasprc.json
+
+      - name: Subir el código
+        if: steps.config.outputs.listo == 'si'
+        working-directory: apps-script
+        run: npx --yes @google/clasp@3.4.1 push --force
+
+      - name: Publicar versión nueva en la misma URL
+        if: steps.config.outputs.listo == 'si'
+        working-directory: apps-script
+        env:
+          DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
+        run: npx --yes @google/clasp@3.4.1 update-deployment "$DEPLOYMENT_ID" --description "${GITHUB_SHA::7}"
+
+      - name: Borrar credenciales
+        if: always()
+        run: rm -f ~/.clasprc.json
