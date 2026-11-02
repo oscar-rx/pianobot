@@ -18,13 +18,11 @@ export class Partitura extends EventTarget {
     return this.osmd?.Sheet?.SourceMeasures.length ?? 0;
   }
 
-  async cargar(url) {
+  /** @param {string} xml  el MusicXML como texto */
+  async cargar(xml) {
     const OSMD = window.opensheetmusicdisplay;
     if (!OSMD) throw new Error('No se ha cargado OpenSheetMusicDisplay');
-    const respuesta = await fetch(url);
-    if (!respuesta.ok) throw new Error(`No se ha podido descargar la partitura (${respuesta.status})`);
-    const xml = await respuesta.text();
-
+    this.contenedor.replaceChildren();
     this.osmd = new OSMD.OpenSheetMusicDisplay(this.contenedor, {
       backend: 'svg',
       autoResize: true,

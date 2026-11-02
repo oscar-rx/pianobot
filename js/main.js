@@ -8,6 +8,7 @@ import { nombreNota, nombreIngles } from './notas.js';
 import { PruebaEscala, ESCALAS } from './prueba-escala.js';
 import { ContadorGasto, formatoDolares, mesDe } from './gasto.js';
 import { Partitura } from './partitura.js';
+import { Servidor } from './servidor.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -21,6 +22,7 @@ const ajustes = {
   sonido: 'madera',
   escala: 'la-menor',
   retrasoMs: 0,
+  pieza: null, // id de la pieza (pestaña «Piezas» del Sheet); null = la primera
   fragmento: { desde: 1, hasta: 4 },
   zoom: 1,
 };
@@ -463,20 +465,86 @@ function cambiarZoom(delta) {
 $('cursor-anterior').addEventListener('click', () => partitura.irACompas(partitura.compas - 1));
 $('cursor-siguiente').addEventListener('click', () => partitura.irACompas(partitura.compas + 1));
 
+// La partitura sale de Google Drive (a través del Apps Script). Primero se enseña la copia guardada
+// en la tablet, al instante, y luego se comprueba en Drive si hay una versión nueva.
+const servidor = new Servidor();
+const elegirPieza = (piezas) => piezas?.find((p) => p.id === ajustes.pieza) ?? piezas?.[0];
+
+async function mostrarPieza(pieza, xml) {
+  $('pieza-titulo').textContent = pieza.titulo;
+  $('pieza-autor').textContent = pieza.compositor ? `· ${pieza.compositor}` : '';
+  await partitura.cargar(xml);
+  verFragmento(ajustes.fragmento.desde, ajustes.fragmento.hasta);
+}
+
 async function cargarPartitura() {
+  $('sin-conexion').hidden = servidor.configurado;
+  $('partitura').hidden = !servidor.configurado;
+  $('conexion-punto').classList.remove('ok');
+  if (!servidor.configurado) {
+    $('partitura-estado').textContent = 'Sin conectar con Drive';
+    return;
+  }
+
+  let mostrado = null;
+  const guardada = elegirPieza(servidor.copiaPiezas());
+  const xmlGuardado = guardada && servidor.copiaPartitura(guardada.id);
+  if (xmlGuardado) {
+    try {
+      await mostrarPieza(guardada, xmlGuardado);
+      mostrado = xmlGuardado;
+      $('partitura-estado').textContent = 'Comprobando Drive…';
+    } catch (err) {
+      console.error(err);
+    }
+  } else {
+    $('partitura-estado').textContent = 'Descargando la partitura de Drive…';
+  }
+
   try {
-    const piezas = await (await fetch('piezas/piezas.json')).json();
-    const pieza = piezas[0];
-    $('pieza-titulo').textContent = pieza.titulo;
-    $('pieza-autor').textContent = `· ${pieza.compositor}`;
-    await partitura.cargar(pieza.fichero);
-    verFragmento(ajustes.fragmento.desde, ajustes.fragmento.hasta);
+    const pieza = elegirPieza(await servidor.piezas());
+    if (!pieza) throw new Error('La pestaña «Piezas» del Sheet está vacía.');
+    const xml = await servidor.partitura(pieza.id);
+    if (xml !== mostrado) await mostrarPieza(pieza, xml);
+    $('conexion-punto').classList.add('ok');
     $('partitura-estado').textContent = `${partitura.numCompases} compases`;
   } catch (err) {
-    console.error(err);
-    $('partitura-estado').textContent = `No se ha podido cargar la partitura: ${err.message}`;
+    console.warn(err);
+    $('partitura-estado').textContent = mostrado
+      ? `Copia guardada en la tablet (Drive: ${err.message})`
+      : `No se ha podido cargar la partitura: ${err.message}`;
   }
 }
+
+// ---------- Conexión con Drive ----------
+function abrirConexion() {
+  $('conexion-url').value = servidor.url;
+  $('conexion-token').value = servidor.token;
+  $('conexion-resultado').textContent = '';
+  $('dialogo-conexion').showModal();
+}
+$('conexion').addEventListener('click', abrirConexion);
+$('conectar').addEventListener('click', abrirConexion);
+$('conexion-cancelar').addEventListener('click', () => $('dialogo-conexion').close());
+$('form-conexion').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const prueba = new Servidor();
+  prueba.url = $('conexion-url').value.trim();
+  prueba.token = $('conexion-token').value.trim();
+  $('conexion-probar').disabled = true;
+  $('conexion-resultado').textContent = 'Probando…';
+  try {
+    const r = await prueba.probar();
+    servidor.guardarConexion(prueba.url, prueba.token);
+    $('conexion-resultado').textContent = `Conectado con el Sheet «${r.hoja}».`;
+    $('dialogo-conexion').close();
+    cargarPartitura();
+  } catch (err) {
+    $('conexion-resultado').textContent = `No funciona: ${err.message}`;
+  } finally {
+    $('conexion-probar').disabled = false;
+  }
+});
 
 // ---------- Arranque ----------
 pintarMetronomo();

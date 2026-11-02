@@ -7,9 +7,10 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
 ## Qué hace ya
 
-- **Partitura en pantalla:** la Invención 13 pintada con OpenSheetMusicDisplay. Solo enseña los compases que
+- **Partitura en pantalla:** la Invención 13, leída de tu Google Drive y pintada con OpenSheetMusicDisplay. Solo enseña los compases que
   pidas («Compases 9 a 12»), con ◀ ▶ para pasar al fragmento anterior o siguiente, A− A+ para el tamaño y un
-  cursor que resalta el compás en el que vas (‹ ›). Recuerda el fragmento y el tamaño.
+  cursor que resalta el compás en el que vas (‹ ›). Recuerda el fragmento y el tamaño, y guarda una copia de
+  la partitura en la tablet: carga al instante y funciona aunque Google falle.
 - **Lee el piano por cable (MIDI por USB):** cada tecla por separado, con su momento, su fuerza (1-127) y cuánto
   la mantienes. Recoge acordes, las dos manos a la vez y el pedal.
 - **Nota grande:** enseña todas las teclas que suenan a la vez y avisa cuando pisas el pedal.
@@ -25,12 +26,14 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
 ## Cómo usarlo
 
-1. Conecta el piano a la tablet con el cable USB.
-2. Abre https://oscar-rx.github.io/pianobot/ en **Chrome** y pulsa **Empezar**. Debe poner «Conectado:» y el
+1. La primera vez: conecta la app con tu Drive (botón **Drive**, arriba). Los pasos están en
+   [`apps-script/README.md`](apps-script/README.md).
+2. Conecta el piano a la tablet con el cable USB.
+3. Abre https://oscar-rx.github.io/pianobot/ en **Chrome** y pulsa **Empezar**. Debe poner «Conectado:» y el
    nombre del piano.
-3. Prueba de la fase 1: metrónomo a 60, «Medir contra: negras», escala de La menor armónica.
+4. Prueba de la fase 1: metrónomo a 60, «Medir contra: negras», escala de La menor armónica.
    Si sale «¡Entera!», el oído funciona.
-4. Prueba de la fase 2: escribe 9 y 12 en «Compases»; deben salir solo esos cuatro compases.
+5. Prueba de la fase 2: escribe 9 y 12 en «Compases»; deben salir solo esos cuatro compases.
 
 La web se publica sola con GitHub Pages desde la rama `claude/jolly-lamport-ytnces`. Si después de un cambio la
 tablet enseña la versión antigua, cierra la pestaña y vuelve a abrirla.
@@ -47,7 +50,8 @@ js/metronomo.js             metrónomo programado con antelación (no se desfasa
 js/entradas/midi.js         el piano por Web MIDI
 js/partitura.js             la partitura (fragmento y cursor) sobre OpenSheetMusicDisplay
 js/vendor/                  OpenSheetMusicDisplay 2.2.1 (licencia BSD-3), guardada aquí para no depender de un CDN
-piezas/                     catálogo (piezas.json) y MusicXML de las piezas de dominio público
+js/servidor.js              conexión con el Apps Script y copia local (catálogo y partituras)
+apps-script/                el Apps Script: el puente con Google Drive y el Sheet «pianobot»
 js/notas.js                 nombres de notas (Do4 = Do central)
 js/prueba-escala.js         la prueba de la fase 1
 js/gasto.js                 precios por modelo y contador de gasto
@@ -60,10 +64,16 @@ comparar con la partitura.
 ## Pruebas
 
 ```bash
-npm test          # gasto y prueba de escala (Node 22)
+npm test          # gasto, prueba de escala y Apps Script con Google simulado (Node 22)
 npm run e2e       # en Chrome: piano MIDI simulado (acordes, fuerza, pedal, dos voces) y partitura (fragmentos)
 npm run servir    # la app en http://localhost:8080
 ```
+
+## Partituras y datos: en Google Drive
+
+Todas las partituras (de dominio público o compradas) y los datos (sesiones, progreso, gasto) están en tu
+Google Drive, en la carpeta `pianobot`, nunca en este repo, que es público. La web los pide al Apps Script con un
+token que solo conocen el script y la tablet. Detalles en [`apps-script/README.md`](apps-script/README.md).
 
 ## Precios de la API (en `js/gasto.js`)
 

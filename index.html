@@ -13,6 +13,9 @@
   <header class="barra">
     <div class="marca">pianobot <span class="fase">fase 2 · ver</span></div>
 
+    <button type="button" id="conexion" class="conexion" title="Conexión con Google Drive">
+      <span class="punto" id="conexion-punto"></span> Drive
+    </button>
     <button type="button" id="gasto" class="gasto" title="Gasto de la API de Claude">
       <span class="gasto-etiqueta">API</span>
       <span>sesión <b id="gasto-sesion">$0.00</b></span>
@@ -39,6 +42,10 @@
           <button type="button" class="paso" id="zoom-menos" aria-label="Más pequeña">A−</button>
           <button type="button" class="paso" id="zoom-mas" aria-label="Más grande">A+</button>
         </div>
+      </div>
+      <div class="sin-conexion" id="sin-conexion" hidden>
+        <p>Las partituras están en tu Google Drive. Conecta la app una vez y se quedan guardadas en la tablet.</p>
+        <button type="button" class="primario" id="conectar">Conectar con Drive</button>
       </div>
       <div class="hoja" id="partitura" aria-label="Partitura"></div>
       <div class="pie-partitura">
@@ -139,6 +146,25 @@
         (en los límites de la organización): así no se pasa aunque la app falle.</p>
       <p class="ayuda" id="gasto-sin-llamadas">Todavía no hay llamadas: el profe llega en la fase 4.</p>
       <div class="botones"><button class="primario" value="ok">Hecho</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-conexion">
+    <form method="dialog" id="form-conexion">
+      <h2>Conexión con Google Drive</h2>
+      <p>Pega la URL de la aplicación web del Apps Script y el token que salió al ejecutar «configurar».
+        Se guardan solo en esta tablet.</p>
+      <label class="campo"><span>URL del Apps Script</span>
+        <input type="url" id="conexion-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="campo"><span>Token</span>
+        <input type="password" id="conexion-token" autocomplete="off" spellcheck="false">
+      </label>
+      <p class="ayuda" id="conexion-resultado" aria-live="polite"></p>
+      <div class="botones">
+        <button type="button" class="secundario" value="cancelar" id="conexion-cancelar">Cancelar</button>
+        <button type="submit" class="primario" id="conexion-probar">Probar y guardar</button>
+      </div>
     </form>
   </dialog>
 
