@@ -123,11 +123,19 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 /* ---------- Ahora ---------- */
 .fila-estado { display: flex; align-items: center; gap: 10px; color: var(--tenue); font-size: 0.95rem; }
 .punto { width: 10px; height: 10px; border-radius: 50%; background: var(--linea); flex: none; }
+.pastilla {
+  margin-left: auto; font-size: 0.8rem; font-weight: 600; padding: 2px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--acento) 18%, var(--tarjeta)); color: var(--tinta);
+}
 .punto.ok { background: var(--bien); box-shadow: 0 0 0 4px color-mix(in srgb, var(--bien) 22%, transparent); }
 .nota-grande {
   font: 500 clamp(4.5rem, 12vw, 8rem)/1 var(--serif); text-align: center; letter-spacing: -0.02em;
   padding-top: 8px; font-variant-numeric: lining-nums;
 }
+.nota-grande[data-cuantas='2'] { font-size: clamp(3.4rem, 8vw, 5.5rem); }
+.nota-grande[data-cuantas='3'] { font-size: clamp(2.6rem, 6vw, 4.2rem); }
+.nota-grande[data-cuantas='4'] { font-size: clamp(2rem, 4.6vw, 3.2rem); }
+.nota-grande { min-height: 1.1em; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; column-gap: 0.25em; }
 .nota-grande.destello { animation: destello 0.35s ease-out; }
 @keyframes destello { from { color: var(--acento); transform: scale(1.04); } to { color: var(--tinta); transform: none; } }
 .nota-sub { text-align: center; color: var(--tenue); font-variant-numeric: tabular-nums; min-height: 1.4em; }

@@ -1,7 +1,7 @@
 // pianobot · fase 1: oír. Une entradas, metrónomo, registro de notas, prueba de escala y gasto.
 
 import { activarAudio, ahoraSonando, contextoAudio } from './audio.js';
-import { Metronomo } from './metronomo.js';
+import { Metronomo, SONIDOS } from './metronomo.js';
 import { EntradaMidi } from './entradas/midi.js';
 import { EntradaMicro } from './entradas/micro.js';
 import { EntradaPantalla } from './entradas/pantalla.js';
@@ -19,6 +19,7 @@ const ajustes = {
   compas: 4,
   subdivision: 1,
   volumen: 0.7,
+  sonido: 'madera',
   sensibilidad: 12,
   escala: 'la-menor',
   retrasoMs: { micro: 0, midi: 0, pantalla: 0 },
@@ -37,6 +38,7 @@ const metronomo = new Metronomo();
 metronomo.ppm = ajustes.ppm;
 metronomo.pulsosPorCompas = ajustes.compas;
 metronomo.volumen = ajustes.volumen;
+metronomo.sonido = SONIDOS[ajustes.sonido] ? ajustes.sonido : 'madera';
 
 const gasto = new ContadorGasto();
 let entrada = null; // la entrada activa
@@ -44,7 +46,9 @@ let origen = null; // tiempo (reloj de audio) de la primera nota, para mostrar m
 let prueba = new PruebaEscala(ESCALAS[ajustes.escala]?.notas ?? ESCALAS['la-menor'].notas);
 let calibrando = null; // {desajustes: []}
 const filasActivas = new Map(); // midi → {fila, inicio}
+const pulsadas = new Map(); // midi → frecuencia (o null): las teclas que suenan ahora, para ver acordes
 let cuentaNotas = 0;
+let ultimoAtaque = null; // momento del último noteon, para reconocer acordes
 let bloqueoPantalla = null;
 
 // ---------- Elección de fuente ----------
@@ -55,6 +59,11 @@ function pintarFuentes() {
     b.classList.toggle('activa', activa);
   }
   $('bloque-micro').hidden = ajustes.fuente !== 'micro';
+  avisoSonido();
+}
+
+function avisoSonido() {
+  $('aviso-sonido').hidden = !(ajustes.fuente === 'micro' && SONIDOS[metronomo.sonido]?.conTono);
 }
 
 for (const b of document.querySelectorAll('[data-fuente]')) {
@@ -85,6 +94,9 @@ async function empezar() {
   entrada.ajusteMs = ajustes.retrasoMs[ajustes.fuente] ?? 0;
   entrada.addEventListener('estado', (e) => ponerEstado(e.detail.texto, e.detail.ok));
   entrada.addEventListener('nota', (e) => alRecibirNota(e.detail));
+  entrada.addEventListener('pedal', (e) => {
+    $('pedal').hidden = !e.detail.pisado;
+  });
   $('empezar').textContent = 'Parar';
   $('empezar').classList.replace('primario', 'secundario');
   try {
@@ -104,6 +116,8 @@ async function empezar() {
 function detenerEntrada() {
   entrada?.detener();
   entrada = null;
+  pulsadas.clear();
+  $('pedal').hidden = true;
   bloqueoPantalla?.release?.().catch(() => {});
   bloqueoPantalla = null;
   $('empezar').textContent = 'Empezar';
@@ -131,8 +145,32 @@ function ponerEstado(texto, ok) {
 }
 
 // ---------- Notas ----------
+// La nota grande enseña todas las teclas que suenan a la vez (un acorde, las dos manos).
+// Al soltar, se queda lo último que sonó hasta la siguiente nota.
+function pintarNotaGrande(destello) {
+  if (!pulsadas.size) return;
+  const midis = [...pulsadas.keys()].sort((a, b) => a - b);
+  const grande = $('nota-actual');
+  grande.textContent = midis.map(nombreNota).join(' ');
+  grande.dataset.cuantas = Math.min(midis.length, 4);
+  let sub = midis.map(nombreIngles).join(' ');
+  const f = midis.length === 1 ? pulsadas.get(midis[0]) : null;
+  if (f) {
+    const cents = Math.round((frecuenciaAMidi(f) - midis[0]) * 100);
+    sub += ` · ${f.toFixed(1)} Hz · ${cents >= 0 ? '+' : ''}${cents} cents`;
+  }
+  if (midis.length > 1) sub += ` · ${midis.length} notas`;
+  $('nota-sub').textContent = sub;
+  if (destello) {
+    grande.classList.remove('destello');
+    void grande.offsetWidth;
+    grande.classList.add('destello');
+  }
+}
+
 function alRecibirNota(n) {
   if (n.tipo === 'noteoff') {
+    pulsadas.delete(n.midi);
     const a = filasActivas.get(n.midi);
     if (a) {
       a.celdaDura.textContent = `${Math.round((n.tiempo - a.inicio) * 1000)} ms`;
@@ -144,17 +182,9 @@ function alRecibirNota(n) {
   if (origen == null) origen = n.tiempo;
   const desajuste = metronomo.sonando || metronomo.pulsos.length ? metronomo.desajuste(n.tiempo, ajustes.subdivision) : null;
 
-  // Nota grande
-  $('nota-actual').textContent = nombreNota(n.midi);
-  let sub = nombreIngles(n.midi);
-  if (n.frecuencia) {
-    const cents = Math.round((frecuenciaAMidi(n.frecuencia) - n.midi) * 100);
-    sub += ` · ${n.frecuencia.toFixed(1)} Hz · ${cents >= 0 ? '+' : ''}${cents} cents`;
-  }
-  $('nota-sub').textContent = sub;
-  $('nota-actual').classList.remove('destello');
-  void $('nota-actual').offsetWidth;
-  $('nota-actual').classList.add('destello');
+  // Nota grande: si no queda nada pulsado, empieza un grupo nuevo
+  pulsadas.set(n.midi, n.frecuencia ?? null);
+  pintarNotaGrande(true);
 
   // Registro
   const fila = document.createElement('tr');
@@ -175,8 +205,10 @@ function alRecibirNota(n) {
   cuentaNotas++;
   $('registro-cuenta').textContent = cuentaNotas;
 
-  // Prueba de escala
-  if (!calibrando) {
+  // Prueba de escala. Las notas que llegan casi a la vez que la anterior son un acorde: no cuentan.
+  const enAcorde = ultimoAtaque != null && n.tiempo - ultimoAtaque < 0.05;
+  ultimoAtaque = n.tiempo;
+  if (!calibrando && !enAcorde) {
     prueba.registrar(n.midi, desajuste);
     pintarEscala();
   }
@@ -236,6 +268,7 @@ $('registro-borrar').addEventListener('click', () => {
   origen = null;
   $('registro-cuenta').textContent = '0';
   $('nota-actual').textContent = '—';
+  delete $('nota-actual').dataset.cuantas;
   $('nota-sub').innerHTML = '&nbsp;';
 });
 
@@ -290,6 +323,7 @@ function pintarMetronomo() {
   $('compas').value = metronomo.pulsosPorCompas;
   $('subdivision').value = ajustes.subdivision;
   $('volumen').value = metronomo.volumen;
+  $('sonido').value = metronomo.sonido;
   $('metro-boton').textContent = metronomo.sonando ? '■ Parar' : '▶ Arrancar';
   const puntos = [];
   for (let i = 0; i < metronomo.pulsosPorCompas; i++) {
@@ -325,6 +359,15 @@ $('compas').addEventListener('change', () => {
 $('subdivision').addEventListener('change', () => {
   ajustes.subdivision = +$('subdivision').value;
   guardar();
+});
+for (const [id, s] of Object.entries(SONIDOS)) $('sonido').append(new Option(s.nombre, id));
+$('sonido').addEventListener('change', async () => {
+  metronomo.sonido = $('sonido').value;
+  ajustes.sonido = metronomo.sonido;
+  guardar();
+  avisoSonido();
+  await activarAudio();
+  if (!metronomo.sonando) metronomo.probar();
 });
 $('volumen').addEventListener('input', () => {
   metronomo.volumen = +$('volumen').value;

@@ -12,7 +12,10 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
     Va con una nota cada vez: una mano y sin pedal.
   - 🎹 **Piano (cable):** MIDI por USB. Es el modo bueno: notas exactas, fuerza real y las dos manos.
   - ⌨️ **Pantalla:** un teclado táctil para comprobar que la app funciona sin piano.
-- **Metrónomo** con tempo, compás y volumen.
+- **Metrónomo** con tempo, compás, volumen y cuatro sonidos: Madera, Pitido, Suave y Tic (el único que el micro
+  nunca confunde con una nota).
+- **Acordes y dos voces:** con el cable, la nota grande enseña todas las teclas que suenan a la vez, y una
+  etiqueta avisa cuando pisas el pedal.
 - **Registro de notas:** cada nota con su momento, su fuerza, cuánto dura y su **desajuste** respecto al pulso
   (negativo = adelantada, positivo = retrasada).
 - **Prueba de escala:** el criterio de «listo» de la fase 1. Tocas la escala subiendo y bajando, y la app marca
@@ -85,7 +88,7 @@ con un error de tiempo de unos 5 ms de media.
 
 ```bash
 npm test          # detector, seguidor de notas, gasto y prueba de escala (Node 22)
-npm run e2e       # Chrome recibe un .wav como si fuera el micro y la escala debe salir entera
+npm run e2e       # en Chrome: un .wav como micro (la escala debe salir entera) y un piano MIDI simulado
 npm run servir    # la app en http://localhost:8080
 ```
 
