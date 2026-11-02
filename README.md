@@ -72,6 +72,17 @@ Pon también un límite de gasto mensual en la Claude Console, para que no se pa
 
 Fases 0 a 7, según el documento de diseño: oír → ver → comparar → profe en texto → voz → memoria → extras.
 
+## Decisiones para la fase 3
+
+- **Duración / articulación (dedos):** nueva métrica. Para cada nota, qué proporción de su valor escrito se mantiene
+  la tecla (p. ej. una blanca al 60 %) y si se encadena con la siguiente o deja hueco (legato, picado, solapada).
+  Se mide solo con las teclas, sin tener en cuenta el pedal.
+- **Pedal:** métrica aparte y 100 % independiente de la anterior: cuándo se pisa y se suelta, respecto al pulso y
+  a los compases. Nunca se mezcla con la duración de las notas.
+- **Quién juzga:** la app solo mide y Claude decide si es un problema según el contexto y el estilo. En Bach una
+  nota cortada o un picado pueden ser lo que se busca; en una pieza romántica, el legato largo o el solapado
+  pueden ayudar. Sin umbrales fijos en la app.
+
 ## Ideas apuntadas
 
 - **Armonía del pasaje en pantalla** (para el profe con IA): enseñar el acorde de cada compás o pulso del
@@ -79,5 +90,3 @@ Fases 0 a 7, según el documento de diseño: oír → ver → comparar → profe
   arpegiados entre las dos voces, así que el análisis lo haría Claude una sola vez por pieza (con Sonnet), se
   guardaría con la pieza y se pintaría como cifrado encima del pentagrama: el MusicXML admite acordes
   (`<harmony>`) y OSMD los dibuja. El profe también podría usarlo al hablar («el 11 es Mi7: piensa en el arpegio»).
-- **Duración / articulación** (por decidir, fase 3): comparar cuánto se mantiene cada tecla con el valor escrito,
-  en proporción, separando dedos y pedal.
