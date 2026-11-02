@@ -3,7 +3,7 @@
 Profe de piano: la tablet escucha lo que tocas y te enseña el fragmento, y Claude decide qué practicar.
 Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
-**Estado:** fases 1 («Oír») y 2 («Ver») hechas.
+**Estado:** fases 1 («Oír»), 2 («Ver») y 3 («Comparar») hechas.
 
 ## Qué hace ya
 
@@ -12,6 +12,12 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   pidas («Compases 9 a 12»), con ◀ ▶ para pasar al fragmento anterior o siguiente, A− A+ para el tamaño y un
   cursor que resalta el compás en el que vas (‹ ›). Recuerda el fragmento y el tamaño, y guarda una copia de
   la partitura en la tablet: carga al instante y funciona aunque Google falle. Cada pieza recuerda su fragmento.
+- **Corrección de intentos (fase 3):** botón **🎯 Corregir** y mano (las dos, derecha o izquierda). Tocas el
+  fragmento y, al parar unos 2,5 s, la app lo compara con la partitura: notas falladas en rojo y omitidas en naranja,
+  y en «Último intento» las métricas por compás y mano: falladas, omitidas, titubeos, desajuste rítmico (contra el
+  metrónomo si suena, si no contra tu propio pulso), tempo real, articulación (% del valor escrito que mantienes la
+  tecla) y pedal (aparte: % del compás pisado y veces que se pisa). Mientras tocas, el cursor sigue por dónde vas.
+  Se queda esperando el siguiente intento.
 - **Digitación en la tablet:** botón **✍️ Digitar**, tocas una nota y eliges el dedo (1-5, o ✕ para quitarlo); salta
   sola a la siguiente nota de esa mano, así que un pasaje se digita pulsando números seguidos. Se guarda en el propio
   MusicXML de Drive (se ve también en MuseScore); sin conexión queda en la tablet y se sube después.
@@ -53,7 +59,10 @@ js/audio.js                 reloj común: metrónomo y piano se miden en el mism
 js/metronomo.js             metrónomo programado con antelación (no se desfasa)
 js/entradas/midi.js         el piano por Web MIDI
 js/partitura.js             la partitura (fragmento y cursor) sobre OpenSheetMusicDisplay
-js/digitacion.js            empareja las notas pintadas con las del MusicXML y escribe <fingering>
+js/musicxml.js              notas del MusicXML (altura, mano, momento, duración, ligaduras) y su pareja en OSMD
+js/digitacion.js            escribe y lee <fingering>
+js/comparar.js              fase 3: alineación tolerante (como un diff) y métricas por compás y mano
+js/intento.js               graba intentos: empiezan con la primera nota y acaban tras unos segundos sin tocar
 js/vendor/                  OpenSheetMusicDisplay 2.2.1 (licencia BSD-3), guardada aquí para no depender de un CDN
 js/servidor.js              conexión con el Apps Script y copia local (catálogo y partituras)
 apps-script/                el Apps Script: el puente con Google Drive y el Sheet «pianobot»
@@ -69,8 +78,8 @@ comparar con la partitura.
 ## Pruebas
 
 ```bash
-npm test          # gasto, prueba de escala y Apps Script con Google simulado (Node 22)
-npm run e2e       # en Chrome: piano MIDI simulado, partitura (fragmentos, piezas, subida) y digitación
+npm test          # gasto, prueba de escala, comparación (fase 3) y Apps Script con Google simulado (Node 22)
+npm run e2e       # en Chrome: piano MIDI simulado, partitura, digitación y corrección («fallas el compás 11»)
 npm run servir    # la app en http://localhost:8080
 ```
 
@@ -94,7 +103,7 @@ Pon también un límite de gasto mensual en la Claude Console, para que no se pa
 
 Fases 0 a 7, según el documento de diseño: oír → ver → comparar → profe en texto → voz → memoria → extras.
 
-## Decisiones para la fase 3
+## Decisiones de la fase 3 (hechas)
 
 - **Duración / articulación (dedos):** nueva métrica. Para cada nota, qué proporción de su valor escrito se mantiene
   la tecla (p. ej. una blanca al 60 %) y si se encadena con la siguiente o deja hueco (legato, picado, solapada).

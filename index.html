@@ -11,7 +11,7 @@
 </head>
 <body>
   <header class="barra">
-    <div class="marca">pianobot <span class="fase">fase 2 · ver</span></div>
+    <div class="marca">pianobot <span class="fase">fase 3 · comparar</span></div>
 
     <button type="button" id="conexion" class="conexion" title="Conexión con Google Drive">
       <span class="punto" id="conexion-punto"></span> Drive
@@ -69,7 +69,34 @@
         <span>Compás <b id="cursor-compas">–</b></span>
         <button type="button" class="paso" id="cursor-siguiente" aria-label="Compás siguiente">›</button>
         <button type="button" class="secundario digitar" id="digitar" aria-pressed="false">✍️ Digitar</button>
+        <button type="button" class="secundario corregir" id="corregir" aria-pressed="false">🎯 Corregir</button>
+        <select id="mano" aria-label="Mano">
+          <option value="ambas">Las dos manos</option>
+          <option value="derecha">Mano derecha</option>
+          <option value="izquierda">Mano izquierda</option>
+        </select>
         <span class="tenue" id="partitura-estado">Cargando la partitura…</span>
+      </div>
+    </section>
+
+    <section class="tarjeta intento" id="tarjeta-intento" aria-labelledby="t-intento" hidden>
+      <div class="cabecera">
+        <h2 id="t-intento">Último intento</h2>
+        <span class="leyenda"><span class="muestra fallada"></span> fallada <span class="muestra omitida"></span> omitida</span>
+      </div>
+      <p class="resumen-intento" id="intento-resumen"></p>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr>
+              <th>Compás</th><th>Mano</th><th>Bien</th><th>Falladas</th><th>Omitidas</th><th>Titubeos</th>
+              <th title="Media de cuánto se adelantan (−) o retrasan (+) las notas">Desajuste</th>
+              <th title="Cuánto se mantiene cada tecla, en % de lo que pide la partitura (mediana)">Articulación</th>
+              <th title="Pedal: % del compás pisado y veces que se pisa">Pedal</th>
+            </tr>
+          </thead>
+          <tbody id="intento-filas"></tbody>
+        </table>
       </div>
     </section>
 

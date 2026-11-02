@@ -99,13 +99,13 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
   gap: 16px;
   padding: 16px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  grid-template-areas: 'partitura partitura' 'ahora escala' 'metronomo registro';
-  grid-template-rows: auto auto 1fr;
+  grid-template-areas: 'partitura partitura' 'intento intento' 'ahora escala' 'metronomo registro';
+  grid-template-rows: auto auto auto 1fr;
   max-width: 1400px;
   margin: 0 auto;
 }
 @media (max-width: 860px) {
-  .rejilla { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'partitura' 'ahora' 'metronomo' 'escala' 'registro'; }
+  .rejilla { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'partitura' 'intento' 'ahora' 'metronomo' 'escala' 'registro'; }
 }
 .tarjeta {
   background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio);
@@ -161,8 +161,23 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 .dedo.actual { background: var(--acento); color: var(--acento-tinta); border-color: var(--acento); }
 .dedo:disabled { opacity: 0.4; }
 /* Nota elegida para digitar: en color sobre el papel claro */
-.hoja .nota-elegida path, .hoja .nota-elegida rect { fill: #c2412a; stroke: #c2412a; }
+.hoja .nota-elegida path, .hoja .nota-elegida rect { fill: #1f6fd1; stroke: #1f6fd1; }
+/* Corrección: notas falladas y omitidas del último intento */
+.hoja .nota-fallada path, .hoja .nota-fallada rect { fill: #d1301f; stroke: #d1301f; }
+.hoja .nota-omitida path, .hoja .nota-omitida rect { fill: #e08a00; stroke: #e08a00; }
+.corregir { min-height: 44px; padding: 8px 14px; }
+.corregir[aria-pressed='true'] { background: var(--acento); color: var(--acento-tinta); border-color: var(--acento); }
+.intento { grid-area: intento; }
+.resumen-intento { margin: 0 0 10px; }
+.leyenda { color: var(--tenue); font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
+.muestra { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.muestra.fallada { background: #d1301f; margin-left: 8px; }
+.muestra.omitida { background: #e08a00; margin-left: 8px; }
+.intento td.cuenta { text-align: right; }
+.intento td.hay { color: var(--mal); font-weight: 600; }
+.intento tr.primera-mano td { border-top: 2px solid var(--linea); }
 .pie-partitura b { font-variant-numeric: tabular-nums; }
+.pie-partitura { flex-wrap: wrap; }
 .pie-partitura #partitura-estado { margin-left: auto; font-size: 0.85rem; }
 
 /* ---------- Ahora ---------- */

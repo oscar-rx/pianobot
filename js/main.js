@@ -10,6 +10,8 @@ import { ContadorGasto, formatoDolares, mesDe } from './gasto.js';
 import { Partitura } from './partitura.js';
 import { Servidor } from './servidor.js';
 import { indexarNotas, claveOsmd, dedoDe, ponerDedo, siguienteNota, leerXml, escribirXml } from './digitacion.js';
+import { esperadasDelFragmento, compasesDelFragmento, alinear, analizar } from './comparar.js';
+import { GrabadorIntentos } from './intento.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -22,6 +24,7 @@ const ajustes = {
   volumen: 0.7,
   sonido: 'madera',
   escala: 'la-menor',
+  mano: 'ambas', // qué mano se corrige: ambas, derecha o izquierda
   retrasoMs: 0,
   pieza: null, // id de la pieza (pestaña «Piezas» del Sheet); null = la primera
   fragmentos: {}, // id de la pieza → {desde, hasta}: cada pieza recuerda su fragmento
@@ -66,9 +69,13 @@ async function empezar() {
   entrada = new EntradaMidi();
   entrada.ajusteMs = ajustes.retrasoMs;
   entrada.addEventListener('estado', (e) => ponerEstado(e.detail.texto, e.detail.ok));
-  entrada.addEventListener('nota', (e) => alRecibirNota(e.detail));
+  entrada.addEventListener('nota', (e) => {
+    alRecibirNota(e.detail);
+    grabador.nota(e.detail);
+  });
   entrada.addEventListener('pedal', (e) => {
     $('pedal').hidden = !e.detail.pisado;
+    grabador.pedalCambia(e.detail);
   });
   $('empezar').textContent = 'Parar';
   $('empezar').classList.replace('primario', 'secundario');
@@ -394,7 +401,7 @@ $('gasto-tope').addEventListener('change', () => {
   gasto.tope = $('gasto-tope').value;
 });
 // Para que la fase 4 (y las pruebas) puedan apuntar llamadas: window.pianobot.gasto.registrar(modelo, usage)
-window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; }, get digitacion() { return dig; } };
+window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; }, get digitacion() { return dig; }, get ultimoIntento() { return ultimoIntento; } };
 
 // ---------- Bucle de dibujo: pulsos del metrónomo ----------
 function dibujar() {
@@ -426,6 +433,7 @@ function pintarFragmento() {
 
 function verFragmento(desde, hasta) {
   if (!partitura.osmd) return;
+  grabador.activar(grabador.activo); // un intento a medias de otro fragmento no vale
   partitura.mostrar(desde, hasta);
   if (piezaActual) ajustes.fragmentos[piezaActual.id] = { desde: partitura.desde, hasta: partitura.hasta };
   guardar();
@@ -640,6 +648,7 @@ function elegirNota(nota) {
 }
 
 function activarDigitacion(activo) {
+  if (activo && grabador.activo) activarCorreccion(false);
   dig.activo = !!(activo && dig.indice && partitura.osmd);
   $('digitar').setAttribute('aria-pressed', String(dig.activo));
   $('paleta-dedos').hidden = !dig.activo;
@@ -709,6 +718,120 @@ document.addEventListener('keydown', (e) => {
   else return;
   e.preventDefault();
 });
+// ---------- Corrección (fase 3) ----------
+// Con «Corregir» activo, cada vez que tocas el fragmento y paras unos segundos, se compara con la partitura:
+// notas falladas en rojo y omitidas en naranja, y las métricas por compás y mano en «Último intento».
+const grabador = new GrabadorIntentos();
+let esperadasDelIntento = null;
+let ultimoIntento = null;
+const textoMano = () => ({ ambas: '', derecha: ' con la mano derecha', izquierda: ' con la mano izquierda' })[ajustes.mano];
+
+function limpiarMarcas() {
+  if (!partitura.osmd) return;
+  partitura.marcar('nota-fallada', () => false);
+  partitura.marcar('nota-omitida', () => false);
+}
+
+async function activarCorreccion(activo) {
+  if (activo && (!dig.indice || !partitura.osmd)) {
+    estadoPartitura('Primero tiene que estar cargada la partitura.');
+    return;
+  }
+  if (activo && dig.activo) activarDigitacion(false);
+  if (activo && !entrada) await empezar();
+  const ok = !!(activo && entrada);
+  grabador.activar(ok);
+  $('corregir').setAttribute('aria-pressed', String(ok));
+  if (ok) estadoPartitura(`Toca los compases ${partitura.desde}–${partitura.hasta}${textoMano()}; al parar unos segundos, se corrige.`);
+  else if (activo) estadoPartitura('Conecta el piano para corregir.');
+  else estadoPartitura(`${partitura.numCompases} compases`);
+}
+
+$('corregir').addEventListener('click', () => activarCorreccion(!grabador.activo));
+$('mano').value = ajustes.mano;
+$('mano').addEventListener('change', () => {
+  ajustes.mano = $('mano').value;
+  guardar();
+  limpiarMarcas();
+  if (grabador.activo) activarCorreccion(true);
+});
+
+grabador.addEventListener('inicio', () => {
+  limpiarMarcas();
+  esperadasDelIntento = esperadasDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano });
+  estadoPartitura('Escuchando…');
+});
+
+// En directo: el cursor sigue el compás por el que vas
+grabador.addEventListener('nota', () => {
+  if (!esperadasDelIntento?.length) return;
+  const { pares } = alinear(esperadasDelIntento, grabador.notas, { finLibre: true });
+  const ultimo = pares.at(-1)?.e;
+  if (ultimo && ultimo.compas !== partitura.compas) partitura.irACompas(ultimo.compas);
+});
+
+grabador.addEventListener('intento', (e) => {
+  const esperadas = esperadasDelIntento ?? esperadasDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano });
+  const compases = compasesDelFragmento(dig.indice, { desde: partitura.desde, hasta: partitura.hasta });
+  const pulso = metronomo.sonando && metronomo.pulsos.length ? { ppm: metronomo.ppm, origen: metronomo.pulsos[0].tiempo } : null;
+  const resultado = analizar({ esperadas, compases, tocadas: e.detail.notas, pedal: e.detail.pedal, metronomo: pulso });
+  ultimoIntento = { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, metronomo: pulso?.ppm ?? null, ...resultado };
+  esperadasDelIntento = null;
+  pintarIntento(ultimoIntento);
+  const estado = (gn) => resultado.notas.get(claveOsmd(gn.sourceNote))?.estado;
+  partitura.marcar('nota-fallada', (gn) => estado(gn) === 'fallada');
+  partitura.marcar('nota-omitida', (gn) => estado(gn) === 'omitida');
+  partitura.irACompas(partitura.desde);
+  estadoPartitura('Corregido. Toca otra vez cuando quieras.');
+});
+
+const conSigno = (ms) => (ms == null ? '–' : `${ms > 0 ? '+' : ''}${ms} ms`);
+
+function pintarIntento(r) {
+  const t = r.total;
+  const partes = [
+    `Compases ${r.desde}–${r.hasta}`,
+    { ambas: 'las dos manos', derecha: 'mano derecha', izquierda: 'mano izquierda' }[r.mano],
+    `${t.bien} de ${t.notas} bien`,
+  ];
+  if (t.falladas) partes.push(`${t.falladas} fallada${t.falladas > 1 ? 's' : ''}`);
+  if (t.omitidas) partes.push(`${t.omitidas} omitida${t.omitidas > 1 ? 's' : ''}`);
+  if (t.titubeos) partes.push(`${t.titubeos} titubeo${t.titubeos > 1 ? 's' : ''}`);
+  if (t.tempo) partes.push(`tempo ${t.tempo} ppm${r.metronomo ? ` (metrónomo a ${r.metronomo})` : ''}`);
+  if (t.desajusteMs != null) partes.push(`desajuste medio ${conSigno(t.desajusteMs)} (±${t.desajusteAbsMs} ms, respecto a ${t.referencia === 'metrónomo' ? 'el metrónomo' : 'tu pulso'})`);
+  $('intento-resumen').textContent = partes.join(' · ');
+
+  const pedal = new Map(r.pedal.map((p) => [p.compas, p]));
+  let compasAnterior = null;
+  const filas = r.filas.map((f) => {
+    const tr = document.createElement('tr');
+    const primera = f.compas !== compasAnterior;
+    if (primera && compasAnterior != null) tr.className = 'primera-mano';
+    compasAnterior = f.compas;
+    const p = pedal.get(f.compas);
+    const celdas = [
+      [primera ? f.compas : '', 'num'],
+      [f.mano, ''],
+      [`${f.bien}/${f.notas}`, 'cuenta'],
+      [f.falladas, `cuenta${f.falladas ? ' hay' : ''}`],
+      [f.omitidas, `cuenta${f.omitidas ? ' hay' : ''}`],
+      [f.titubeos, `cuenta${f.titubeos ? ' hay' : ''}`],
+      [conSigno(f.desajusteMs), 'num'],
+      [f.articulacion == null ? '–' : `${f.articulacion} %`, 'num'],
+      [primera && p ? `${p.pisadoPct} %${p.pisadas ? ` · ${p.pisadas}×` : ''}` : '', 'num'],
+    ];
+    for (const [texto, clase] of celdas) {
+      const td = document.createElement('td');
+      td.textContent = texto;
+      if (clase) td.className = clase;
+      tr.append(td);
+    }
+    return tr;
+  });
+  $('intento-filas').replaceChildren(...filas);
+  $('tarjeta-intento').hidden = false;
+}
+
 // Si la app se cierra o pasa a segundo plano, se guarda lo pendiente.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') guardarDigitacionYa();
