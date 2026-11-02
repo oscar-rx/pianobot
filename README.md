@@ -8,7 +8,9 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 ## Qué hace ya
 
 - **Partituras en pantalla:** las de tu carpeta de Google Drive, pintadas con OpenSheetMusicDisplay. Para añadir
-  una, botón **＋** (se sube sola a Drive) o métela en la carpeta: el catálogo se rellena solo. Selector de pieza. Solo enseña los compases que
+  una, botón **＋** (se sube sola a Drive) o métela en la carpeta: el catálogo se rellena solo. Selector de pieza.
+  Los títulos que algunos ficheros traen escritos dentro de los compases (p. ej. los convertidos de Capella de Tobi's
+  Notenarchiv) se quitan solos y pasan a los datos de la pieza; las indicaciones musicales no se tocan. Solo enseña los compases que
   pidas («Compases 9 a 12»), con ◀ ▶ para pasar al fragmento anterior o siguiente, A− A+ para el tamaño y un
   cursor que resalta el compás en el que vas (‹ ›). Recuerda el fragmento y el tamaño, y guarda una copia de
   la partitura en la tablet: carga al instante y funciona aunque Google falle. Cada pieza recuerda su fragmento.

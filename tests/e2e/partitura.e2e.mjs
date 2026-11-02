@@ -18,10 +18,11 @@ if (capturas) mkdirSync(capturas, { recursive: true });
 
 const APPS_SCRIPT = 'https://script.google.com/macros/s/PRUEBA/exec';
 const TOKEN = 'token-de-prueba';
-const PARTITURAS = { prueba: partituraPrueba(25), corta: partituraPrueba(8) };
+const PARTITURAS = { prueba: partituraPrueba(25), corta: partituraPrueba(8), capella: partituraPrueba(6, { textosCapella: true }) };
 const PIEZAS = [
   { id: 'prueba', titulo: 'Pieza de prueba', compositor: 'Nadie', fichero: 'prueba.musicxml', compases: 25 },
   { id: 'corta', titulo: 'Pieza corta', compositor: '', fichero: 'corta.musicxml', compases: 8 },
+  { id: 'capella', titulo: 'Metida directamente en Drive', compositor: '', fichero: 'capella.xml', compases: 6 },
 ];
 
 // Apps Script simulado. `estado.caido` hace que falle como si no hubiera conexión.
@@ -79,7 +80,7 @@ try {
     await esperarCarga(pagina);
     comprobar(!(await pagina.isVisible('#dialogo-conexion')), 'token correcto: se guarda y se cierra');
     const opciones = await pagina.$$eval('#pieza option', (os) => os.map((o) => o.textContent));
-    comprobar(JSON.stringify(opciones) === JSON.stringify(['Pieza de prueba · Nadie', 'Pieza corta']), 'el selector tiene las piezas de Drive');
+    comprobar(opciones.length === 3 && opciones[0] === 'Pieza de prueba · Nadie' && opciones[1] === 'Pieza corta', 'el selector tiene las piezas de Drive');
     comprobar((await pagina.evaluate(() => window.pianobot.partitura.numCompases)) === 25, 'carga la primera pieza');
 
     // Cada pieza recuerda su fragmento
@@ -102,6 +103,21 @@ try {
     await pagina.waitForFunction(() => document.querySelector('#pieza').value === 'nueva', null, { timeout: 15000 });
     await esperarCarga(pagina);
     comprobar((await pagina.evaluate(() => window.pianobot.partitura.numCompases)) === 12, 'subir una partitura la añade y la abre');
+    // Una partitura con los títulos metidos en los compases: se limpia antes de subirla
+    await pagina.setInputFiles('#fichero-pieza', { name: 'tobi.xml', mimeType: 'text/xml', buffer: Buffer.from(partituraPrueba(6, { textosCapella: true })) });
+    await pagina.waitForFunction(() => /Quitados/.test(document.querySelector('#partitura-estado').textContent), null, { timeout: 15000 });
+    const subida = PARTITURAS.tobi;
+    comprobar(!/Invención de prueba\.|BWV 999|2\. Fughetta/.test(subida) && subida.includes('dolce'),
+      'al subir, se quitan título, autor y movimiento de dentro de los compases (y se respeta el «dolce»)');
+    comprobar(/<work-title>Invención de prueba<\/work-title>/.test(subida) && /<creator type="composer">Juan Sebastián Prueba<\/creator>/.test(subida),
+      'el título y el autor pasan a los datos de la partitura');
+    comprobar((await pagina.textContent('#partitura-estado')).includes('Quitados 3 textos'), `lo dice: ${await pagina.textContent('#partitura-estado')}`);
+    // Una metida directamente en Drive (sin limpiar): se limpia al mostrarla
+    await pagina.selectOption('#pieza', 'capella');
+    await esperarCarga(pagina);
+    const textosSvg = await pagina.$$eval('#partitura svg text', (ts) => ts.map((t) => t.textContent));
+    comprobar(!textosSvg.some((t) => /Invención de prueba|BWV|Fughetta/.test(t)) && textosSvg.some((t) => t.includes('dolce')),
+      'una metida directamente en Drive también se ve limpia (con su «dolce»)');
     await pagina.setInputFiles('#fichero-pieza', { name: 'foto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
     comprobar((await pagina.textContent('#partitura-estado')).includes('Solo se pueden añadir'), 'un fichero que no es partitura se rechaza');
     await pagina.selectOption('#pieza', 'prueba');

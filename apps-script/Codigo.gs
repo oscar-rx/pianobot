@@ -186,9 +186,20 @@ function datosDePartitura(xml, nombreFichero) {
     const m = xml.match(re);
     return m ? m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : '';
   };
+  // Ficheros convertidos de Capella: título y autor escritos como texto en los dos primeros compases
+  const primeros = (xml.match(/<measure[\s>][\s\S]*?<\/measure>/g) || []).slice(0, 2).join('');
+  const palabras = [];
+  primeros.replace(/<words([^>]*)>([\s\S]*?)<\/words>/g, function (_, atributos, contenido) {
+    const tam = (atributos.match(/font-size="([\d.]+)"/) || [])[1];
+    palabras.push({ texto: contenido.trim(), tam: Number(tam || 0), derecha: /justify="right"/.test(atributos) });
+    return '';
+  });
+  const tituloEnTexto = (palabras.filter(function (p) { return p.tam >= 14; })[0] || {}).texto;
+  const autorEnTexto = (palabras.filter(function (p) { return p.derecha && (/\n/.test(p.texto) || /\b(BWV|Op\.?|KV|K\.|Hob\.?|WoO|D\.)\s*\d/i.test(p.texto)); })[0] || {}).texto;
   const titulo = texto(/<work-title>([\s\S]*?)<\/work-title>/) || texto(/<movement-title>([\s\S]*?)<\/movement-title>/) ||
-    String(nombreFichero).replace(EXTENSIONES, '');
-  const compositor = texto(/<creator[^>]*type="composer"[^>]*>([\s\S]*?)<\/creator>/);
+    (tituloEnTexto ? tituloEnTexto.replace(/\.$/, '') : '') || String(nombreFichero).replace(EXTENSIONES, '');
+  const compositor = texto(/<creator[^>]*type="composer"[^>]*>([\s\S]*?)<\/creator>/) ||
+    (autorEnTexto ? autorEnTexto.split('\n')[0].trim() : '');
   const primeraParte = (xml.match(/<part\s[^>]*id="[^"]*"[^>]*>([\s\S]*?)<\/part>/) || [])[1] || '';
   const compases = (primeraParte.match(/<measure[\s>]/g) || []).length;
   const tiempos = xml.match(/<beats>(\d+)<\/beats>\s*<beat-type>(\d+)<\/beat-type>/);

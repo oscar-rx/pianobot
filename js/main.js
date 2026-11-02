@@ -10,6 +10,7 @@ import { ContadorGasto, formatoDolares, mesDe } from './gasto.js';
 import { Partitura } from './partitura.js';
 import { Servidor } from './servidor.js';
 import { indexarNotas, claveOsmd, dedoDe, ponerDedo, siguienteNota, leerXml, escribirXml } from './digitacion.js';
+import { limpiarPartitura } from './musicxml.js';
 import { esperadasDelFragmento, compasesDelFragmento, alinear, analizar } from './comparar.js';
 import { GrabadorIntentos } from './intento.js';
 import { PracticaAlTempo } from './al-tempo.js';
@@ -547,6 +548,13 @@ function pintarSelector() {
 }
 
 async function mostrarXml(xml) {
+  // Partituras metidas directamente en Drive: se quitan los títulos escritos dentro de los compases
+  try {
+    const doc = leerXml(xml);
+    if (limpiarPartitura(doc).quitados.length) xml = escribirXml(doc);
+  } catch (err) {
+    console.warn(err);
+  }
   prepararDigitacion(xml);
   await partitura.cargar(xml);
   const f = ajustes.fragmentos[piezaActual.id] ?? { desde: 1, hasta: 4 };
@@ -1078,9 +1086,21 @@ $('fichero-pieza').addEventListener('change', async () => {
   $('anadir-pieza').disabled = true;
   estadoPartitura(`Subiendo «${fichero.name}» a Drive…`);
   try {
-    const pieza = await servidor.subir(fichero);
+    // Antes de subirla se limpia: fuera los títulos escritos dentro de los compases (y pasan a sus datos).
+    // Los .mxl (comprimidos, como los de MuseScore) suben tal cual: ya vienen limpios.
+    let subir = fichero;
+    let limpieza = null;
+    if (!/\.mxl$/i.test(fichero.name)) {
+      const doc = leerXml(await fichero.text());
+      limpieza = limpiarPartitura(doc);
+      if (limpieza.quitados.length) subir = new File([escribirXml(doc)], fichero.name, { type: 'application/xml' });
+    }
+    const pieza = await servidor.subir(subir);
     piezas = await servidor.piezas();
     await abrirPieza(piezas.find((p) => p.id === pieza.id) ?? pieza);
+    if (limpieza?.quitados.length) {
+      estadoPartitura(`Añadida. Quitados ${limpieza.quitados.length} textos de título que se pintaban encima de las notas.`);
+    }
   } catch (err) {
     estadoPartitura(`No se ha podido añadir: ${err.message}`);
   } finally {

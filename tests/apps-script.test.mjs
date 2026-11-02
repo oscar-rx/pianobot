@@ -254,3 +254,15 @@ test('guardar un .mxl: queda como .musicxml, la fila apunta al nuevo y el .mxl v
   assert.equal(piezas[0].id, 'comprimida', 'conserva su ID (y con él su progreso)');
   assert.equal(llamar({ accion: 'pieza', id: 'comprimida', token: 'secreto' }).musicxml, nuevo);
 });
+
+test('ficheros convertidos de Capella: el título y el autor se sacan de los textos de los primeros compases', () => {
+  const capella = `<?xml version="1.0"?><score-partwise version="2.0"><part-list><score-part id="P1"/></part-list><part id="P1">` +
+    `<measure number="1"><direction placement="above"><direction-type><words font-size="12" font-weight="bold">1. Präludium</words></direction-type></direction>` +
+    `<direction placement="above"><direction-type><words relative-x="317" font-size="17" font-weight="bold" justify="center">Präludium und Fughetta in G-Dur.</words></direction-type></direction></measure>` +
+    `<measure number="2"><direction placement="above"><direction-type><words font-size="10" justify="right">Johann Sebastian Bach\nBWV 902</words></direction-type></direction></measure>` +
+    `</part></score-partwise>`;
+  const { llamar } = entorno({ ficheros: { 'BWV_0902.xml': capella } });
+  const [pieza] = llamar({ accion: 'piezas', token: 'secreto' }).piezas;
+  assert.equal(pieza.titulo, 'Präludium und Fughetta in G-Dur');
+  assert.equal(pieza.compositor, 'Johann Sebastian Bach');
+});

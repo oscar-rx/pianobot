@@ -103,6 +103,69 @@ export function claveOsmd(nota) {
   );
 }
 
+const CATALOGO = /\b(BWV|Op\.?|KV|K\.|Hob\.?|WoO|D\.)\s*\d/i;
+
+/**
+ * Quita de la partitura los títulos escritos como texto DENTRO de los compases (pasa con los ficheros
+ * convertidos de Capella, p. ej. de Tobi's Notenarchiv), que se pintarían encima de las notas:
+ *  - título: letra grande (≥ 14) en los dos primeros compases;
+ *  - autor: alineado a la derecha, en varias líneas o con número de catálogo (BWV, Op., KV…), en los dos primeros;
+ *  - movimiento: en negrita y numerado («2. Fughetta»), en cualquier compás.
+ * Las indicaciones musicales («dolce», «a tempo», dinámicas, tempo) no se tocan. Si la partitura no traía título
+ * ni autor en sus datos, se ponen los encontrados. Modifica `doc` y devuelve lo que ha hecho.
+ */
+export function limpiarPartitura(doc) {
+  const quitados = [];
+  let titulo = null;
+  let compositor = null;
+  for (const parte of doc.querySelectorAll('score-partwise > part')) {
+    [...parte.children].filter((c) => c.tagName === 'measure').forEach((compas, i) => {
+      for (const direccion of [...compas.children].filter((c) => c.tagName === 'direction')) {
+        for (const tipo of [...direccion.children].filter((c) => c.tagName === 'direction-type')) {
+          const palabras = [...tipo.children];
+          if (palabras.length !== 1 || palabras[0].tagName !== 'words') continue;
+          const w = palabras[0];
+          const texto = w.textContent.trim();
+          const tam = parseFloat(w.getAttribute('font-size')) || 0;
+          const negrita = w.getAttribute('font-weight') === 'bold';
+          let clase = null;
+          if (i < 2 && tam >= 14) clase = 'titulo';
+          else if (i < 2 && w.getAttribute('justify') === 'right' && (texto.includes('\n') || CATALOGO.test(texto))) clase = 'autor';
+          else if (negrita && /^\d+\.\s+\S/.test(texto)) clase = 'movimiento';
+          if (!clase) continue;
+          if (clase === 'titulo') titulo ??= texto.replace(/\.$/, '');
+          if (clase === 'autor') compositor ??= texto.split('\n')[0].trim();
+          tipo.remove();
+          quitados.push(texto);
+        }
+        const queda = [...direccion.children].some((c) => c.tagName === 'direction-type' || c.tagName === 'sound');
+        if (!queda) direccion.remove();
+      }
+    });
+  }
+  // Título y autor a los datos de la partitura, si no los tenía
+  const raiz = doc.documentElement;
+  const hijo = (el, nombre) => [...el.children].find((c) => c.tagName === nombre) ?? null;
+  if (titulo && !hijo(raiz, 'work')?.querySelector('work-title') && !hijo(raiz, 'movement-title')) {
+    const obra = doc.createElement('work');
+    obra.appendChild(doc.createElement('work-title')).textContent = titulo;
+    raiz.insertBefore(obra, raiz.firstElementChild);
+  }
+  if (compositor && !raiz.querySelector('identification > creator[type="composer"]')) {
+    let ident = hijo(raiz, 'identification');
+    if (!ident) {
+      ident = doc.createElement('identification');
+      const despues = [...raiz.children].find((c) => !['work', 'movement-number', 'movement-title'].includes(c.tagName));
+      raiz.insertBefore(ident, despues ?? null);
+    }
+    const creador = doc.createElement('creator');
+    creador.setAttribute('type', 'composer');
+    creador.textContent = compositor;
+    ident.insertBefore(creador, ident.firstElementChild);
+  }
+  return { quitados, titulo, compositor };
+}
+
 export function leerXml(texto) {
   const doc = new DOMParser().parseFromString(texto, 'application/xml');
   if (doc.querySelector('parsererror')) throw new Error('La partitura no es un MusicXML válido.');
