@@ -7,10 +7,11 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
 ## Qué hace ya
 
-- **Partitura en pantalla:** la Invención 13, leída de tu Google Drive y pintada con OpenSheetMusicDisplay. Solo enseña los compases que
+- **Partituras en pantalla:** las de tu carpeta de Google Drive, pintadas con OpenSheetMusicDisplay. Para añadir
+  una, botón **＋** (se sube sola a Drive) o métela en la carpeta: el catálogo se rellena solo. Selector de pieza. Solo enseña los compases que
   pidas («Compases 9 a 12»), con ◀ ▶ para pasar al fragmento anterior o siguiente, A− A+ para el tamaño y un
   cursor que resalta el compás en el que vas (‹ ›). Recuerda el fragmento y el tamaño, y guarda una copia de
-  la partitura en la tablet: carga al instante y funciona aunque Google falle.
+  la partitura en la tablet: carga al instante y funciona aunque Google falle. Cada pieza recuerda su fragmento.
 - **Lee el piano por cable (MIDI por USB):** cada tecla por separado, con su momento, su fuerza (1-127) y cuánto
   la mantienes. Recoge acordes, las dos manos a la vez y el pedal.
 - **Nota grande:** enseña todas las teclas que suenan a la vez y avisa cuando pisas el pedal.

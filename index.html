@@ -28,7 +28,12 @@
   <main class="rejilla">
     <section class="tarjeta partitura" aria-labelledby="t-partitura">
       <div class="cabecera">
-        <h2 id="t-partitura"><span id="pieza-titulo">Partitura</span> <span class="tenue" id="pieza-autor"></span></h2>
+        <h2 id="t-partitura" class="oculto">Partitura</h2>
+        <div class="pieza">
+          <select id="pieza" class="selector-pieza" aria-label="Pieza"></select>
+          <button type="button" class="paso" id="anadir-pieza" title="Añadir una partitura (.musicxml, .xml o .mxl)" aria-label="Añadir partitura">＋</button>
+          <input type="file" id="fichero-pieza" hidden>
+        </div>
         <div class="fragmento" role="group" aria-label="Fragmento">
           <button type="button" class="paso" id="frag-anterior" aria-label="Fragmento anterior">◀</button>
           <label>Compases

@@ -23,7 +23,7 @@ const ajustes = {
   escala: 'la-menor',
   retrasoMs: 0,
   pieza: null, // id de la pieza (pestaña «Piezas» del Sheet); null = la primera
-  fragmento: { desde: 1, hasta: 4 },
+  fragmentos: {}, // id de la pieza → {desde, hasta}: cada pieza recuerda su fragmento
   zoom: 1,
 };
 try {
@@ -31,6 +31,7 @@ try {
   // Versiones anteriores guardaban un retraso por fuente (micro, cable, pantalla): se queda el del cable.
   if (guardados.retrasoMs && typeof guardados.retrasoMs === 'object') guardados.retrasoMs = guardados.retrasoMs.midi ?? 0;
   delete guardados.fuente;
+  delete guardados.fragmento; // antes había un solo fragmento para todas las piezas
   delete guardados.sensibilidad;
   Object.assign(ajustes, guardados);
 } catch {}
@@ -425,7 +426,7 @@ function pintarFragmento() {
 function verFragmento(desde, hasta) {
   if (!partitura.osmd) return;
   partitura.mostrar(desde, hasta);
-  ajustes.fragmento = { desde: partitura.desde, hasta: partitura.hasta };
+  if (piezaActual) ajustes.fragmentos[piezaActual.id] = { desde: partitura.desde, hasta: partitura.hasta };
   guardar();
   pintarFragmento();
 }
@@ -466,55 +467,138 @@ $('cursor-anterior').addEventListener('click', () => partitura.irACompas(partitu
 $('cursor-siguiente').addEventListener('click', () => partitura.irACompas(partitura.compas + 1));
 
 // La partitura sale de Google Drive (a través del Apps Script). Primero se enseña la copia guardada
-// en la tablet, al instante, y luego se comprueba en Drive si hay una versión nueva.
+// en la tablet, al instante, y luego se comprueba en Drive si hay algo nuevo.
 const servidor = new Servidor();
-const elegirPieza = (piezas) => piezas?.find((p) => p.id === ajustes.pieza) ?? piezas?.[0];
+let piezas = [];
+let piezaActual = null;
+let carga = 0; // cada carga tiene su número: si llega tarde (ya se ha elegido otra pieza), se ignora
 
-async function mostrarPieza(pieza, xml) {
-  $('pieza-titulo').textContent = pieza.titulo;
-  $('pieza-autor').textContent = pieza.compositor ? `· ${pieza.compositor}` : '';
+const estadoPartitura = (texto) => {
+  $('partitura-estado').textContent = texto;
+};
+const preferida = () => piezas.find((p) => p.id === ajustes.pieza) ?? piezas[0];
+
+function pintarSelector() {
+  $('pieza').replaceChildren(
+    ...piezas.map((p) => new Option(p.compositor ? `${p.titulo} · ${p.compositor}` : p.titulo, p.id, false, p.id === piezaActual?.id)),
+  );
+  $('pieza').hidden = !piezas.length;
+}
+
+async function mostrarXml(xml) {
   await partitura.cargar(xml);
-  verFragmento(ajustes.fragmento.desde, ajustes.fragmento.hasta);
+  const f = ajustes.fragmentos[piezaActual.id] ?? { desde: 1, hasta: 4 };
+  verFragmento(f.desde, f.hasta);
+}
+
+/** Enseña una pieza: su copia de la tablet si la hay y, después, la versión de Drive si es distinta. */
+async function abrirPieza(pieza, yaMostrado = null) {
+  const esta = ++carga;
+  piezaActual = pieza;
+  ajustes.pieza = pieza.id;
+  guardar();
+  pintarSelector();
+  let mostrado = yaMostrado;
+  if (!mostrado) {
+    const copia = servidor.copiaPartitura(pieza.id);
+    if (copia) {
+      try {
+        await mostrarXml(copia);
+        mostrado = copia;
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+  }
+  if (esta !== carga) return;
+  estadoPartitura(mostrado ? 'Comprobando Drive…' : 'Descargando la partitura de Drive…');
+  try {
+    const xml = await servidor.partitura(pieza.id);
+    if (esta !== carga) return;
+    if (xml !== mostrado) await mostrarXml(xml);
+    $('conexion-punto').classList.add('ok');
+    estadoPartitura(`${partitura.numCompases} compases`);
+  } catch (err) {
+    console.warn(err);
+    if (esta !== carga) return;
+    estadoPartitura(mostrado ? `Copia guardada en la tablet (Drive: ${err.message})` : `No se ha podido cargar la partitura: ${err.message}`);
+  }
 }
 
 async function cargarPartitura() {
   $('sin-conexion').hidden = servidor.configurado;
   $('partitura').hidden = !servidor.configurado;
+  $('anadir-pieza').hidden = !servidor.configurado;
   $('conexion-punto').classList.remove('ok');
   if (!servidor.configurado) {
-    $('partitura-estado').textContent = 'Sin conectar con Drive';
+    piezas = [];
+    pintarSelector();
+    estadoPartitura('Sin conectar con Drive');
     return;
   }
 
+  // 1. Lo guardado en la tablet, al instante
+  piezas = servidor.copiaPiezas() ?? [];
   let mostrado = null;
-  const guardada = elegirPieza(servidor.copiaPiezas());
-  const xmlGuardado = guardada && servidor.copiaPartitura(guardada.id);
-  if (xmlGuardado) {
+  const deCopia = preferida();
+  const xmlCopia = deCopia && servidor.copiaPartitura(deCopia.id);
+  if (xmlCopia) {
+    piezaActual = deCopia;
+    pintarSelector();
     try {
-      await mostrarPieza(guardada, xmlGuardado);
-      mostrado = xmlGuardado;
-      $('partitura-estado').textContent = 'Comprobando Drive…';
+      await mostrarXml(xmlCopia);
+      mostrado = { id: deCopia.id, xml: xmlCopia };
     } catch (err) {
-      console.error(err);
+      console.warn(err);
     }
-  } else {
-    $('partitura-estado').textContent = 'Descargando la partitura de Drive…';
   }
 
+  // 2. El catálogo de Drive (por si hay piezas nuevas) y la pieza
+  estadoPartitura('Comprobando Drive…');
   try {
-    const pieza = elegirPieza(await servidor.piezas());
-    if (!pieza) throw new Error('La pestaña «Piezas» del Sheet está vacía.');
-    const xml = await servidor.partitura(pieza.id);
-    if (xml !== mostrado) await mostrarPieza(pieza, xml);
-    $('conexion-punto').classList.add('ok');
-    $('partitura-estado').textContent = `${partitura.numCompases} compases`;
+    piezas = await servidor.piezas();
   } catch (err) {
     console.warn(err);
-    $('partitura-estado').textContent = mostrado
-      ? `Copia guardada en la tablet (Drive: ${err.message})`
-      : `No se ha podido cargar la partitura: ${err.message}`;
+    pintarSelector();
+    estadoPartitura(mostrado ? `Copia guardada en la tablet (Drive: ${err.message})` : `No se ha podido cargar el catálogo: ${err.message}`);
+    return;
   }
+  if (!piezas.length) {
+    pintarSelector();
+    estadoPartitura('La carpeta pianobot/piezas está vacía: añade una partitura con ＋.');
+    return;
+  }
+  const pieza = preferida();
+  await abrirPieza(pieza, mostrado?.id === pieza.id ? mostrado.xml : null);
 }
+
+$('pieza').addEventListener('change', () => {
+  const pieza = piezas.find((p) => p.id === $('pieza').value);
+  if (pieza) abrirPieza(pieza);
+});
+
+// Añadir una partitura desde la tablet: se sube a la carpeta de Drive y queda en el catálogo.
+$('anadir-pieza').addEventListener('click', () => $('fichero-pieza').click());
+$('fichero-pieza').addEventListener('change', async () => {
+  const fichero = $('fichero-pieza').files[0];
+  $('fichero-pieza').value = '';
+  if (!fichero) return;
+  if (!/\.(musicxml|xml|mxl)$/i.test(fichero.name)) {
+    estadoPartitura('Solo se pueden añadir partituras .musicxml, .xml o .mxl (las exporta MuseScore).');
+    return;
+  }
+  $('anadir-pieza').disabled = true;
+  estadoPartitura(`Subiendo «${fichero.name}» a Drive…`);
+  try {
+    const pieza = await servidor.subir(fichero);
+    piezas = await servidor.piezas();
+    await abrirPieza(piezas.find((p) => p.id === pieza.id) ?? pieza);
+  } catch (err) {
+    estadoPartitura(`No se ha podido añadir: ${err.message}`);
+  } finally {
+    $('anadir-pieza').disabled = false;
+  }
+});
 
 // ---------- Conexión con Drive ----------
 function abrirConexion() {

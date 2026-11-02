@@ -62,59 +62,75 @@ function leerZip(buf) {
   return fuera;
 }
 
-const XML = '<?xml version="1.0"?><score-partwise><part id="P1"><measure number="1"/></part></score-partwise>';
+const XML = (titulo = 'Invención n.º 13', compositor = 'Johann Sebastian Bach', compases = 3) =>
+  `<?xml version="1.0"?><score-partwise version="3.1"><work><work-title>${titulo}</work-title></work>` +
+  `<identification><creator type="composer">${compositor}</creator></identification>` +
+  `<part-list><score-part id="P1"/></part-list><part id="P1">` +
+  Array.from({ length: compases }, (_, i) => `<measure number="${i + 1}">${i === 0 ? '<attributes><time><beats>4</beats><beat-type>4</beat-type></time></attributes><direction><sound tempo="80"/></direction>' : ''}</measure>`).join('') +
+  `</part></score-partwise>`;
 
-function entorno({ token = 'secreto', ficheros = {}, filas } = {}) {
+// Google simulado: una carpeta de Drive con ficheros y un Sheet con la pestaña «Piezas».
+function entorno({ token = 'secreto', ficheros = {} } = {}) {
   const propiedades = new Map(token ? [['TOKEN', token]] : []);
   const registro = [];
-  const hojaPiezas = filas ?? [
-    ['ID', 'Título', 'Compositor', 'Catálogo', 'Fichero', 'Compases', 'Compás', 'Tempo objetivo (ppm)'],
-    ['bwv784', 'Invención n.º 13', 'J. S. Bach', 'BWV 784', 'bwv784.musicxml', 25, '4/4', 80],
-    ['prueba', 'Prueba comprimida', 'Nadie', '', 'prueba.mxl', 1, '4/4', 60],
-    ['', '', '', '', '', '', '', ''],
-  ];
+  let siguienteId = 1;
+  const drive = new Map(); // id → {nombre, bytes}
+  const meter = (nombre, contenido) => {
+    const id = `drive${siguienteId++}`;
+    drive.set(id, { nombre, bytes: Buffer.from(contenido) });
+    return id;
+  };
+  for (const [nombre, contenido] of Object.entries(ficheros)) meter(nombre, contenido);
+  const fichero = (id) => ({ getId: () => id, getName: () => drive.get(id).nombre, getBlob: () => new Blob(drive.get(id).nombre, drive.get(id).bytes) });
+  const iterador = (lista) => ({ hasNext: () => lista.length > 0, next: () => lista.shift() });
+
+  let filas = [['ID', 'Título', 'Compositor', 'Catálogo']]; // cabecera antigua: el script debe rehacerla
+  const hoja = {
+    getLastRow: () => filas.length,
+    getRange: (fila, col, nf = 1, nc = 1) => ({
+      getValues: () => Array.from({ length: nf }, (_, i) => Array.from({ length: nc }, (_, j) => filas[fila - 1 + i]?.[col - 1 + j] ?? '')),
+      setValues: (valores) => {
+        valores.forEach((v, i) => { filas[fila - 1 + i] = [...v]; });
+        return { setFontWeight() {} };
+      },
+    }),
+    appendRow: (fila) => filas.push(fila.map((v) => (typeof v === 'string' && v.startsWith("'") ? v.slice(1) : v))),
+    setFrozenRows() {},
+  };
   const ctx = {
-    PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: (k) => propiedades.get(k) ?? null,
-        setProperty: (k, v) => propiedades.set(k, v),
-      }),
-    },
-    SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({
-        getName: () => 'pianobot',
-        getSheetByName: (n) => (n === 'Piezas' ? { getDataRange: () => ({ getValues: () => hojaPiezas.map((f) => [...f]) }) } : null),
-      }),
-    },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => propiedades.get(k) ?? null, setProperty: (k, v) => propiedades.set(k, v) }) },
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getName: () => 'pianobot', getSheetByName: (n) => (n === 'Piezas' ? hoja : null), insertSheet: () => hoja }) },
     DriveApp: {
+      getFileById: (id) => fichero(id),
       getFolderById: () => ({
         getName: () => 'piezas',
-        getFilesByName: (nombre) => {
-          const lista = nombre in ficheros ? [new Blob(nombre, ficheros[nombre])] : [];
-          return { hasNext: () => lista.length > 0, next: () => ({ getBlob: () => lista.shift() }) };
-        },
+        getFiles: () => iterador([...drive.keys()].map(fichero)),
+        getFilesByName: (n) => iterador([...drive.keys()].filter((id) => drive.get(id).nombre === n).map(fichero)),
+        createFile: (blob) => fichero(meter(blob.getName(), blob.bytes)),
       }),
     },
     Utilities: {
       getUuid: () => '12345678-1234-1234-1234-123456789abc',
       unzip: (blob) => leerZip(blob.bytes),
+      base64Decode: (b64) => [...Buffer.from(b64, 'base64')],
+      newBlob: (bytes, _tipo, nombre) => new Blob(nombre, bytes.map((b) => b & 255)),
     },
-    ContentService: {
-      MimeType: { JSON: 'json' },
-      createTextOutput: (texto) => ({ texto, setMimeType() { return this; } }),
-    },
+    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (texto) => ({ texto, setMimeType() { return this; } }) },
     Logger: { log: (m) => registro.push(m) },
   };
   vm.createContext(ctx);
   vm.runInContext(codigo, ctx);
   const llamar = (parametros) => JSON.parse(ctx.doGet({ parameter: parametros }).texto);
-  return { ctx, llamar, propiedades, registro };
+  const enviar = (cuerpo) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(cuerpo) } }).texto);
+  return { ctx, llamar, enviar, propiedades, registro, filas: () => filas, drive };
 }
 
 test('sin token o con uno incorrecto no da nada', () => {
-  const { llamar } = entorno();
+  const { llamar, enviar } = entorno();
   assert.equal(llamar({ accion: 'piezas' }).error, 'Token incorrecto.');
   assert.equal(llamar({ accion: 'piezas', token: 'otro' }).error, 'Token incorrecto.');
+  assert.equal(enviar({ accion: 'subir', token: 'otro', nombre: 'a.musicxml', base64: 'eA==' }).error, 'Token incorrecto.');
 });
 
 test('sin configurar, lo dice', () => {
@@ -131,34 +147,64 @@ test('configurar crea un token, lo apunta en el registro y no lo cambia si ya ex
   assert.equal(ctx.configurar(), t);
 });
 
-test('hola y catálogo', () => {
-  const { llamar } = entorno();
+test('basta con meter el fichero en la carpeta: el catálogo se rellena solo', () => {
+  const { llamar, filas } = entorno({
+    ficheros: { 'BWV_0784.musicxml': '﻿' + XML(), 'notas.txt': 'no es una partitura', 'Gymnopédie.xml': XML('Gymnopédie n.º 1', 'Erik Satie', 5) },
+  });
   assert.deepEqual(llamar({ accion: 'hola', token: 'secreto' }), { ok: true, hoja: 'pianobot' });
   const { piezas } = llamar({ accion: 'piezas', token: 'secreto' });
-  assert.equal(piezas.length, 2);
-  assert.deepEqual(piezas[0], {
-    id: 'bwv784', titulo: 'Invención n.º 13', compositor: 'J. S. Bach', catalogo: 'BWV 784',
-    fichero: 'bwv784.musicxml', compases: 25, compas: '4/4', tempoObjetivo: 80,
+  assert.deepEqual(piezas.map((p) => p.titulo), ['Gymnopédie n.º 1', 'Invención n.º 13']);
+  assert.deepEqual(piezas[1], {
+    id: 'bwv_0784', titulo: 'Invención n.º 13', compositor: 'Johann Sebastian Bach', fichero: 'BWV_0784.musicxml',
+    compases: 3, compas: '4/4', tempoObjetivo: 80, idDrive: 'drive1',
   });
+  assert.equal(piezas[0].id, 'gymnopedie');
+  // Apuntadas en «Piezas» con la cabecera nueva, sin duplicarse en la siguiente llamada
+  llamar({ accion: 'piezas', token: 'secreto' });
+  assert.deepEqual(filas()[0], ['ID', 'Título', 'Compositor', 'Fichero', 'Compases', 'Compás', 'Tempo objetivo (ppm)', 'ID de Drive']);
+  assert.equal(filas().length, 3);
 });
 
-test('lee un MusicXML normal (y le quita el BOM)', () => {
-  const { llamar } = entorno({ ficheros: { 'bwv784.musicxml': '﻿' + XML } });
-  assert.deepEqual(llamar({ accion: 'pieza', id: 'bwv784', token: 'secreto' }), { id: 'bwv784', musicxml: XML });
+test('lo que se retoca a mano en «Piezas» (p. ej. el tempo objetivo) se respeta', () => {
+  const { llamar, filas } = entorno({ ficheros: { 'bwv784.musicxml': XML() } });
+  llamar({ accion: 'piezas', token: 'secreto' });
+  filas()[1][6] = 66;
+  filas()[1][1] = 'Invención 13 (la menor)';
+  const [pieza] = llamar({ accion: 'piezas', token: 'secreto' }).piezas;
+  assert.equal(pieza.tempoObjetivo, 66);
+  assert.equal(pieza.titulo, 'Invención 13 (la menor)');
 });
 
-test('lee un .mxl comprimido, como los que exporta MuseScore', () => {
+test('lee la partitura (normal y .mxl comprimido, como los de MuseScore)', () => {
   const mxl = crearZip({
     'META-INF/container.xml': '<container><rootfiles><rootfile full-path="partitura.xml"/></rootfiles></container>',
-    'partitura.xml': XML,
+    'partitura.xml': XML('Prueba comprimida'),
   });
-  const { llamar } = entorno({ ficheros: { 'prueba.mxl': mxl } });
-  assert.equal(llamar({ accion: 'pieza', id: 'prueba', token: 'secreto' }).musicxml, XML);
+  const { llamar } = entorno({ ficheros: { 'bwv784.musicxml': '﻿' + XML(), 'prueba.mxl': mxl } });
+  const { piezas } = llamar({ accion: 'piezas', token: 'secreto' });
+  assert.equal(piezas.find((p) => p.id === 'prueba').titulo, 'Prueba comprimida');
+  assert.equal(llamar({ accion: 'pieza', id: 'bwv784', token: 'secreto' }).musicxml, XML());
+  assert.equal(llamar({ accion: 'pieza', id: 'prueba', token: 'secreto' }).musicxml, XML('Prueba comprimida'));
 });
 
-test('errores claros: pieza que no existe y fichero que falta en Drive', () => {
+test('subir una partitura desde la app la guarda en Drive y la añade al catálogo', () => {
+  const { enviar, llamar, drive } = entorno({ ficheros: { 'bwv784.musicxml': XML() } });
+  const base64 = Buffer.from(XML('Preludio en Do', 'J. S. Bach', 35)).toString('base64');
+  const { pieza } = enviar({ accion: 'subir', token: 'secreto', nombre: 'BWV 846.musicxml', base64 });
+  assert.equal(pieza.id, 'bwv-846');
+  assert.equal(pieza.compases, 35);
+  assert.equal(drive.size, 2);
+  assert.equal(llamar({ accion: 'piezas', token: 'secreto' }).piezas.length, 2);
+  // Repetido, o que no es una partitura: error claro y no se guarda nada
+  assert.match(enviar({ accion: 'subir', token: 'secreto', nombre: 'BWV 846.musicxml', base64 }).error, /Ya hay/);
+  assert.match(enviar({ accion: 'subir', token: 'secreto', nombre: 'foto.jpg', base64 }).error, /Solo se admiten/);
+  const noPartitura = Buffer.from('<html>hola</html>').toString('base64');
+  assert.match(enviar({ accion: 'subir', token: 'secreto', nombre: 'raro.xml', base64: noPartitura }).error, /no es una partitura/);
+  assert.equal(drive.size, 2);
+});
+
+test('errores claros', () => {
   const { llamar } = entorno();
-  assert.match(llamar({ accion: 'pieza', id: 'nada', token: 'secreto' }).error, /No hay ninguna pieza/);
-  assert.match(llamar({ accion: 'pieza', id: 'bwv784', token: 'secreto' }).error, /No encuentro «bwv784.musicxml»/);
+  assert.match(llamar({ accion: 'pieza', id: 'nada', token: 'secreto' }).error, /No encuentro la pieza/);
   assert.match(llamar({ accion: 'otra', token: 'secreto' }).error, /Acción desconocida/);
 });

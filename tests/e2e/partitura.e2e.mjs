@@ -18,21 +18,35 @@ if (capturas) mkdirSync(capturas, { recursive: true });
 
 const APPS_SCRIPT = 'https://script.google.com/macros/s/PRUEBA/exec';
 const TOKEN = 'token-de-prueba';
-const XML = partituraPrueba(25);
-const PIEZAS = [{ id: 'prueba', titulo: 'Pieza de prueba', compositor: 'Nadie', fichero: 'prueba.musicxml', compases: 25 }];
+const PARTITURAS = { prueba: partituraPrueba(25), corta: partituraPrueba(8) };
+const PIEZAS = [
+  { id: 'prueba', titulo: 'Pieza de prueba', compositor: 'Nadie', fichero: 'prueba.musicxml', compases: 25 },
+  { id: 'corta', titulo: 'Pieza corta', compositor: '', fichero: 'corta.musicxml', compases: 8 },
+];
 
 // Apps Script simulado. `estado.caido` hace que falle como si no hubiera conexión.
 const estado = { caido: false, llamadas: [] };
 async function appsScript(ruta) {
-  const url = new URL(ruta.request().url());
-  estado.llamadas.push(url.searchParams.get('accion'));
+  const peticion = ruta.request();
+  const url = new URL(peticion.url());
+  const p = peticion.method() === 'POST' ? JSON.parse(peticion.postData()) : Object.fromEntries(url.searchParams);
+  estado.llamadas.push(p.accion);
   if (estado.caido) return ruta.abort('internetdisconnected');
   const json = (datos) => ruta.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(datos) });
-  if (url.searchParams.get('token') !== TOKEN) return json({ error: 'Token incorrecto.' });
-  switch (url.searchParams.get('accion')) {
+  if (p.token !== TOKEN) return json({ error: 'Token incorrecto.' });
+  if (peticion.method() === 'POST' && peticion.headers()['content-type']?.startsWith('application/json')) {
+    return json({ error: 'La subida debe ir como texto plano (si no, el navegador la bloquea).' });
+  }
+  switch (p.accion) {
     case 'hola': return json({ ok: true, hoja: 'pianobot' });
     case 'piezas': return json({ piezas: PIEZAS });
-    case 'pieza': return json({ id: 'prueba', musicxml: XML });
+    case 'pieza': return json({ id: p.id, musicxml: PARTITURAS[p.id] });
+    case 'subir': {
+      const id = p.nombre.replace(/\..*$/, '').toLowerCase();
+      PARTITURAS[id] = Buffer.from(p.base64, 'base64').toString('utf8');
+      PIEZAS.push({ id, titulo: 'Subida desde la tablet', compositor: '', fichero: p.nombre, compases: 12 });
+      return json({ pieza: PIEZAS.at(-1) });
+    }
     default: return json({ error: 'Acción desconocida' });
   }
 }
@@ -64,7 +78,34 @@ try {
     await pagina.click('#conexion-probar');
     await esperarCarga(pagina);
     comprobar(!(await pagina.isVisible('#dialogo-conexion')), 'token correcto: se guarda y se cierra');
-    comprobar((await pagina.textContent('#pieza-titulo')) === 'Pieza de prueba', 'carga la pieza desde Drive');
+    const opciones = await pagina.$$eval('#pieza option', (os) => os.map((o) => o.textContent));
+    comprobar(JSON.stringify(opciones) === JSON.stringify(['Pieza de prueba · Nadie', 'Pieza corta']), 'el selector tiene las piezas de Drive');
+    comprobar((await pagina.evaluate(() => window.pianobot.partitura.numCompases)) === 25, 'carga la primera pieza');
+
+    // Cada pieza recuerda su fragmento
+    await pagina.fill('#frag-desde', '5');
+    await pagina.dispatchEvent('#frag-desde', 'change');
+    await pagina.selectOption('#pieza', 'corta');
+    await esperarCarga(pagina);
+    comprobar((await pagina.evaluate(() => window.pianobot.partitura.numCompases)) === 8, 'cambiar de pieza carga la otra');
+    comprobar(JSON.stringify(await pintados(pagina)) === '[1,2,3,4]', 'la otra pieza empieza en su compás 1');
+    await pagina.selectOption('#pieza', 'prueba');
+    await esperarCarga(pagina);
+    comprobar((await pintados(pagina))[0] === 5, 'al volver, la primera sigue en el compás 5');
+    await pagina.fill('#frag-desde', '1');
+    await pagina.dispatchEvent('#frag-desde', 'change');
+    await pagina.fill('#frag-hasta', '4');
+    await pagina.dispatchEvent('#frag-hasta', 'change');
+
+    // Añadir una partitura desde la tablet
+    await pagina.setInputFiles('#fichero-pieza', { name: 'nueva.musicxml', mimeType: 'application/octet-stream', buffer: Buffer.from(partituraPrueba(12)) });
+    await pagina.waitForFunction(() => document.querySelector('#pieza').value === 'nueva', null, { timeout: 15000 });
+    await esperarCarga(pagina);
+    comprobar((await pagina.evaluate(() => window.pianobot.partitura.numCompases)) === 12, 'subir una partitura la añade y la abre');
+    await pagina.setInputFiles('#fichero-pieza', { name: 'foto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') });
+    comprobar((await pagina.textContent('#partitura-estado')).includes('Solo se pueden añadir'), 'un fichero que no es partitura se rechaza');
+    await pagina.selectOption('#pieza', 'prueba');
+    await esperarCarga(pagina);
     await contexto.storageState({ path: '/tmp/pianobot-e2e-estado.json' });
     await contexto.close();
   }

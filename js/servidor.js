@@ -40,21 +40,35 @@ export class Servidor {
     guardarLocal(CLAVE_CONEXION, { url: this.url, token: this.token });
   }
 
-  async llamar(accion, parametros = {}) {
+  #url() {
     if (!this.configurado) throw new Error('Falta conectar con Google Drive.');
-    let url;
     try {
-      url = new URL(this.url);
+      return new URL(this.url);
     } catch {
       throw new Error('La URL del Apps Script no es válida.');
     }
+  }
+
+  // Peticiones «simples» (GET sin cabeceras propias, o POST con texto plano): el navegador no las
+  // bloquea por ir a otro dominio. Apps Script responde con una redirección que fetch sigue sola.
+  llamar(accion, parametros = {}) {
+    const url = this.#url();
     url.searchParams.set('accion', accion);
     url.searchParams.set('token', this.token);
     for (const [k, v] of Object.entries(parametros)) url.searchParams.set(k, v);
-    // Petición «simple» (GET sin cabeceras propias): el navegador no la bloquea por venir de otro dominio.
+    return this.#pedir(url, { redirect: 'follow' });
+  }
+
+  enviar(accion, datos) {
+    const url = this.#url();
+    const cuerpo = JSON.stringify({ accion, token: this.token, ...datos });
+    return this.#pedir(url, { method: 'POST', body: cuerpo, redirect: 'follow' });
+  }
+
+  async #pedir(url, opciones) {
     let respuesta;
     try {
-      respuesta = await fetch(url, { redirect: 'follow' });
+      respuesta = await fetch(url, opciones);
     } catch {
       throw new Error('No hay conexión con el Apps Script.');
     }
@@ -83,6 +97,16 @@ export class Servidor {
     const { musicxml } = await this.llamar('pieza', { id });
     guardarLocal(`${PREFIJO_COPIA}pieza.${id}`, musicxml);
     return musicxml;
+  }
+
+  /** Sube una partitura (un File de la tablet) a la carpeta de Drive. Devuelve la pieza ya catalogada. */
+  async subir(fichero) {
+    if (fichero.size > 15 * 1024 * 1024) throw new Error('El fichero es demasiado grande (más de 15 MB).');
+    const bytes = new Uint8Array(await fichero.arrayBuffer());
+    let binario = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const { pieza } = await this.enviar('subir', { nombre: fichero.name, base64: btoa(binario) });
+    return pieza;
   }
 
   copiaPiezas() {

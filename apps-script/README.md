@@ -1,7 +1,8 @@
 # Apps Script de pianobot
 
 El puente entre la web (GitHub Pages) y tu Google Drive. Va pegado al Sheet «pianobot» y se publica como
-aplicación web. Ahora mismo sirve el catálogo de piezas y las partituras; en la fase 4 llamará a Claude.
+aplicación web. Ahora mismo sirve el catálogo de piezas y las partituras y recibe las que subes desde la app;
+en la fase 4 llamará a Claude.
 
 - `Codigo.gs`: el código. Se copia tal cual en el editor de Apps Script.
 - `appsscript.json`: la configuración del proyecto (para cuando se suba con clasp).
@@ -14,8 +15,16 @@ pianobot/                  carpeta
 └── piezas/                las partituras: .musicxml, .xml o .mxl (el comprimido que exporta MuseScore)
 ```
 
-Para añadir una pieza: sube el fichero a `pianobot/piezas` y añade una fila en la pestaña «Piezas» con su ID
-(corto y sin espacios, p. ej. `bwv784`) y el nombre exacto del fichero en la columna «Fichero».
+## Añadir una pieza
+
+Cualquiera de las dos:
+
+- En la app, botón **＋** junto al nombre de la pieza: eliges el fichero en la tablet y se sube solo a Drive.
+- O mete el fichero directamente en la carpeta `pianobot/piezas` de Drive.
+
+No hay que tocar el Sheet: el script lee de la partitura el título, el compositor, los compases, el compás y el
+tempo, y la apunta él solo en la pestaña «Piezas». Si quieres, retoca allí el título o el tempo objetivo; lo que
+cambies se respeta. La columna «ID de Drive» la usa el script para saber qué fichero es cada fila: no la toques.
 
 ## Instalarlo (una vez)
 

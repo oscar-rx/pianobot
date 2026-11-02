@@ -121,7 +121,12 @@ h2 { font: 600 1.05rem/1.2 var(--sans); margin: 0; letter-spacing: 0.01em; }
 /* ---------- Partitura ---------- */
 .partitura { grid-area: partitura; display: flex; flex-direction: column; gap: 10px; }
 .partitura .cabecera { margin-bottom: 0; }
-.partitura h2 { font: 600 1.3rem/1.2 var(--serif); }
+.pieza { display: flex; align-items: center; gap: 8px; margin-right: auto; min-width: 0; }
+.selector-pieza {
+  font: 600 1.3rem/1.2 var(--serif); border: 1px solid transparent; background: transparent; padding: 6px 8px;
+  max-width: min(60vw, 32em); text-overflow: ellipsis; cursor: pointer;
+}
+.selector-pieza:hover, .selector-pieza:focus { border-color: var(--linea); }
 .fragmento, .zoom, .pie-partitura { display: flex; align-items: center; gap: 8px; }
 .fragmento label { display: flex; align-items: center; gap: 6px; color: var(--tenue); }
 .fragmento input {
