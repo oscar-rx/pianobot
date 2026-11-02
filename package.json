@@ -5,7 +5,7 @@
   "description": "Profe de piano: la tablet escucha y enseña, Claude decide.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "e2e": "node tests/e2e/midi.e2e.mjs && node tests/e2e/partitura.e2e.mjs && node tests/e2e/digitacion.e2e.mjs && node tests/e2e/corregir.e2e.mjs && node tests/e2e/al-tempo.e2e.mjs",
+    "e2e": "node tests/e2e/midi.e2e.mjs && node tests/e2e/partitura.e2e.mjs && node tests/e2e/digitacion.e2e.mjs && node tests/e2e/corregir.e2e.mjs && node tests/e2e/al-tempo.e2e.mjs && node tests/e2e/profe.e2e.mjs",
     "servir": "node herramientas/servidor.mjs"
   }
 }

@@ -7,7 +7,9 @@ guarda los cambios (la digitación); en la fase 4 llamará a Claude.
 Al guardar, sobrescribe el fichero de Drive; Drive conserva las versiones anteriores (clic derecho → Gestionar
 versiones). Si era un `.mxl`, lo guarda como `.musicxml` al lado y manda el `.mxl` a la papelera.
 
-- `Codigo.gs`: el código.
+- `Codigo.gs`: el código (partituras, catálogo, subidas).
+- `Profe.gs`: el profe: llama a la API de Claude con el resumen de los intentos y devuelve la siguiente indicación;
+  apunta el gasto en «Gasto» y los intentos en «Intentos».
 - `appsscript.json`: la configuración del proyecto.
 - `.clasp.json` y `.claspignore`: para subirlo con clasp (ver «Cuando cambie el código»).
 
@@ -47,6 +49,18 @@ cambies se respeta. La columna «ID de Drive» la usa el script para saber qué 
 
 «Cualquier usuario» significa que la URL responde a quien la tenga, pero sin el token no devuelve nada. Nunca
 pongas la URL ni el token en el repo ni los compartas.
+
+## La clave de la API de Claude (para el profe)
+
+1. En la Claude Console (https://platform.claude.com): crea una API key, carga saldo y pon un **límite de gasto
+   mensual** (así no se pasa aunque la app falle).
+2. En el editor de Apps Script de «pianobot»: ⚙ **Project Settings** → **Script properties** → **Add script
+   property**: nombre `ANTHROPIC_API_KEY`, valor la clave. Nunca en el repo ni en la tablet.
+3. El profe necesita permiso para conectarse a internet (la API de Claude): en el editor, elige **configurar** →
+   **▶ Run** y acepta. Hay que hacerlo en cuanto se publique un Apps Script que lo use: hasta entonces Google no
+   deja usar la aplicación web (ni para las partituras). El registro de «configurar» dice si la clave está puesta.
+
+Modelos que se pueden elegir en la app: Haiku 5.5 (por defecto: el más rápido y barato), Sonnet 5.5 y Opus 5.5.
 
 ## Cuando cambie el código
 

@@ -3,7 +3,7 @@
 Profe de piano: la tablet escucha lo que tocas y te enseña el fragmento, y Claude decide qué practicar.
 Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
 
-**Estado:** fases 1 («Oír»), 2 («Ver») y 3 («Comparar») hechas.
+**Estado:** fases 1 («Oír»), 2 («Ver»), 3 («Comparar») y 4 («El profe», en texto) hechas.
 
 ## Qué hace ya
 
@@ -20,6 +20,12 @@ Pieza de prueba: la Invención n.º 13 de Bach (BWV 784).
   metrónomo si suena, si no contra tu propio pulso), tempo real, articulación (% del valor escrito que mantienes la
   tecla) y pedal (aparte: % del compás pisado y veces que se pisa). Mientras tocas, el cursor sigue por dónde vas.
   Se queda esperando el siguiente intento.
+- **🧑‍🏫 Profe (fase 4):** Claude decide qué practicar. Dice la indicación en el panel («El 11 se te atasca en el
+  salto. Solo el 11, mano derecha»), la app pone sola el fragmento, la mano y el tempo y arranca los intentos al tempo
+  las veces que pida; al acabarlas le manda los resultados y decide el siguiente paso. Botones para contestarle (Otra
+  vez, Más lento, Más rápido, Siguiente, Para) y un cuadro para decirle algo. Se elige el modelo: Haiku 5.5 (rápido,
+  ~0,0004 $ por indicación), Sonnet 5.5 (~0,008 $) u Opus 5.5 (~0,015 $). Cada llamada suma en el contador de gasto
+  y queda apuntada en las pestañas «Gasto» e «Intentos» del Sheet.
 - **⏱ Al tempo:** con el metrónomo. Al pulsarlo da un compás de cuenta y después la línea roja avanza sola y de forma continua al tempo (también en los silencios);
   cada nota se juzga en su momento: verde si la aciertas, rojo si tocas otra, naranja si se te pasa. Al acabar el
   fragmento se para el metrónomo y sale el resumen (desajuste respecto al metrónomo). El tempo, en el metrónomo de
@@ -78,6 +84,7 @@ js/digitacion.js            escribe y lee <fingering>
 js/comparar.js              fase 3: alineación tolerante (como un diff) y métricas por compás y mano
 js/intento.js               graba intentos: empiezan con la primera nota y acaban tras unos segundos sin tocar
 js/al-tempo.js              modo «Al tempo»: cada nota se juzga en su momento según el metrónomo
+apps-script/Profe.gs        el profe: prompt, llamada a la API de Claude (salida JSON) y registro de gasto e intentos
 js/vendor/                  OpenSheetMusicDisplay 2.2.1 (licencia BSD-3), guardada aquí para no depender de un CDN
 js/servidor.js              conexión con el Apps Script y copia local (catálogo y partituras)
 apps-script/                el Apps Script: el puente con Google Drive y el Sheet «pianobot»

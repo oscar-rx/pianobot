@@ -49,6 +49,7 @@
         </div>
       </div>
       <div class="barra-practica" role="toolbar" aria-label="Práctica">
+        <button type="button" class="secundario corregir" id="profe" aria-pressed="false" title="El profe (Claude) decide qué practicar">🧑‍🏫 Profe</button>
         <button type="button" class="secundario digitar" id="digitar" aria-pressed="false">✍️ Digitar</button>
         <span class="guardado" id="guardado" aria-live="polite" hidden></span>
         <button type="button" class="secundario corregir" id="corregir" aria-pressed="false" title="Tocas a tu ritmo; al parar, se corrige">🎯 Corregir</button>
@@ -72,6 +73,26 @@
         </div>
       </div>
       <p class="estado-partitura tenue" id="partitura-estado" aria-live="polite">Cargando la partitura…</p>
+      <div class="panel-profe" id="panel-profe" hidden>
+        <p class="profe-dice" id="profe-dice" aria-live="polite"></p>
+        <p class="profe-plan tenue" id="profe-plan"></p>
+        <div class="profe-botones" role="group" aria-label="Contestar al profe">
+          <button type="button" class="paso" data-orden="otra-vez">↺ Otra vez</button>
+          <button type="button" class="paso" data-orden="mas-lento">− Más lento</button>
+          <button type="button" class="paso" data-orden="mas-rapido">+ Más rápido</button>
+          <button type="button" class="paso" data-orden="siguiente" id="profe-siguiente">→ Siguiente</button>
+          <button type="button" class="paso" data-orden="para">■ Para</button>
+          <form class="profe-comentario" id="profe-comentario">
+            <input type="text" id="profe-texto" placeholder="Dile algo al profe…" autocomplete="off" aria-label="Comentario para el profe">
+            <button type="submit" class="paso">Enviar</button>
+          </form>
+          <select id="modelo-profe" aria-label="Modelo del profe" title="Modelo de Claude que hace de profe">
+            <option value="claude-haiku-5-5">Haiku 5.5 · rápido (~0,0004 $)</option>
+            <option value="claude-sonnet-5-5">Sonnet 5.5 (~0,008 $)</option>
+            <option value="claude-opus-5-5">Opus 5.5 (~0,015 $)</option>
+          </select>
+        </div>
+      </div>
       <div class="sin-conexion" id="sin-conexion" hidden>
         <p>Las partituras están en tu Google Drive. Conecta la app una vez y se quedan guardadas en la tablet.</p>
         <button type="button" class="primario" id="conectar">Conectar con Drive</button>

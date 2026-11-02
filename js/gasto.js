@@ -19,6 +19,11 @@ export const PRECIOS = {
     salida: 10,
     lecturaCache: 0.2,
   },
+  'claude-opus-5-5': {
+    entrada: 4,
+    salida: 20,
+    lecturaCache: 0.2,
+  },
 };
 
 // Si un modelo no da precio de caché, se usa la regla habitual de Anthropic:

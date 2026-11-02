@@ -6,6 +6,7 @@
 //   GET  …/exec?accion=pieza&id=…&token=…        el MusicXML de una pieza
 //   POST …/exec  {"accion":"subir","token":…,"nombre":…,"base64":…}   guarda una partitura nueva en Drive
 //   POST …/exec  {"accion":"guardar","token":…,"id":…,"musicxml":…}    guarda cambios (p. ej. la digitación)
+//   POST …/exec  {"accion":"profe","token":…,"peticion":{…}}            el profe decide el siguiente paso (Profe.gs)
 //
 // Para añadir una pieza basta con meter el fichero en pianobot/piezas (o subirlo desde la app):
 // el script lee de la partitura el título, el compositor, los compases, el compás y el tempo,
@@ -54,6 +55,8 @@ function doPost(e) {
         return { pieza: subirPartitura(p.nombre, p.base64) };
       case 'guardar':
         return { pieza: guardarPartitura(p.id, p.musicxml) };
+      case 'profe':
+        return pedirAlProfe(p.peticion);
       default:
         throw new Error('Acción desconocida: ' + p.accion);
     }
@@ -68,9 +71,12 @@ function configurar() {
     token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
     props.setProperty('TOKEN', token);
   }
-  // Tocar Drive y el Sheet hace que Google pida los permisos ahora, no en la primera llamada de la web.
+  // Tocar Drive, el Sheet y la conexión a internet hace que Google pida los permisos ahora, no en la primera
+  // llamada de la web (si falta alguno, la web no puede ni cargar las partituras).
   DriveApp.getFolderById(CARPETA_PIEZAS).getName();
   hojaPiezas();
+  UrlFetchApp.getRequest('https://api.anthropic.com/v1/messages');
+  Logger.log(props.getProperty('ANTHROPIC_API_KEY') ? 'Clave de la API de Claude: puesta.' : 'Falta la clave de la API de Claude (ANTHROPIC_API_KEY en las propiedades del script).');
   Logger.log('Token para la tablet (cópialo en pianobot → Drive): ' + token);
   return token;
 }

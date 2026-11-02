@@ -126,6 +126,11 @@ export class Servidor {
     return leerLocal(`${PREFIJO_PENDIENTE}${id}`) === true;
   }
 
+  /** El profe: manda el resumen de los intentos y devuelve {instruccion, modelo, uso, coste}. */
+  profe(peticion) {
+    return this.enviar('profe', { peticion });
+  }
+
   copiaPiezas() {
     return leerLocal(`${PREFIJO_COPIA}piezas`);
   }

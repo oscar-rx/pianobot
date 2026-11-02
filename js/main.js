@@ -31,6 +31,7 @@ const ajustes = {
   pieza: null, // id de la pieza (pestaña «Piezas» del Sheet); null = la primera
   fragmentos: {}, // id de la pieza → {desde, hasta}: cada pieza recuerda su fragmento
   vista: 'linea', // 'linea' (un solo pentagrama que se desplaza compás a compás) o 'paginas'
+  modeloProfe: 'claude-haiku-5-5', // modelo de Claude que hace de profe
   zoom: 1,
 };
 try {
@@ -418,7 +419,7 @@ $('gasto-tope').addEventListener('change', () => {
   gasto.tope = $('gasto-tope').value;
 });
 // Para que la fase 4 (y las pruebas) puedan apuntar llamadas: window.pianobot.gasto.registrar(modelo, usage)
-window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; }, get digitacion() { return dig; }, get ultimoIntento() { return ultimoIntento; }, get alTempo() { return practica; } };
+window.pianobot = { gasto, metronomo, get entrada() { return entrada; }, get partitura() { return partitura; }, get digitacion() { return dig; }, get ultimoIntento() { return ultimoIntento; }, get alTempo() { return practica; }, get profe() { return profe; } };
 
 // ---------- Bucle de dibujo: pulsos del metrónomo ----------
 function dibujar() {
@@ -996,6 +997,7 @@ function terminarAlTempo() {
   partitura.pintarEstados((gn) => r.notas.get(claveOsmd(gn.sourceNote))?.estado);
   partitura.irACompas(partitura.desde);
   estadoPartitura('Hecho. Pulsa ⏱ Al tempo para repetir.');
+  if (profe.activo) repeticionTerminada(ultimoIntento);
 }
 
 function pararAlTempo() {
@@ -1011,7 +1013,221 @@ $('al-tempo').addEventListener('click', () => {
   if (practica) {
     pararAlTempo();
     estadoPartitura('Parado.');
+    if (profe.activo) pausarProfe();
   } else empezarAlTempo();
+});
+
+// ---------- El profe (fase 4) ----------
+// El profe (Claude, a través del Apps Script) dice qué tocar; la app pone el fragmento, la mano y el tempo y
+// arranca los intentos «al tempo» las veces que pida. Al acabarlas, le manda los resultados y decide el siguiente paso.
+const profe = { activo: false, sesion: null, inicio: 0, instruccion: null, rep: 0, intentos: [], historial: [], notas: [], esperando: false, temporizador: null };
+const nombreManoProfe = { ambas: 'las dos manos', derecha: 'mano derecha', izquierda: 'mano izquierda' };
+
+$('modelo-profe').value = ajustes.modeloProfe;
+$('modelo-profe').addEventListener('change', () => {
+  ajustes.modeloProfe = $('modelo-profe').value;
+  guardar();
+});
+
+function decirProfe(texto, { pensando = false } = {}) {
+  $('profe-dice').textContent = texto;
+  $('profe-dice').classList.toggle('pensando', pensando);
+}
+
+function pintarPlanProfe() {
+  const i = profe.instruccion;
+  if (!i || ['descansar', 'terminar'].includes(i.accion)) {
+    $('profe-plan').textContent = '';
+    return;
+  }
+  const compases = i.desde === i.hasta ? `Compás ${i.desde}` : `Compases ${i.desde}–${i.hasta}`;
+  const vez = Math.min(profe.rep + 1, i.repeticiones);
+  $('profe-plan').textContent = `${compases} · ${nombreManoProfe[i.mano]} · ${i.tempo} ppm · vez ${vez} de ${i.repeticiones}`;
+}
+
+async function empezarProfe() {
+  if (!dig.indice || !partitura.osmd || !piezaActual) {
+    estadoPartitura('Primero tiene que estar cargada la partitura.');
+    return;
+  }
+  if (!servidor.configurado) {
+    estadoPartitura('El profe necesita la conexión con Drive (botón Drive).');
+    return;
+  }
+  if (dig.activo) activarDigitacion(false);
+  if (grabador.activo) await activarCorreccion(false);
+  if (practica) pararAlTempo();
+  await activarAudio();
+  if (!entrada) await empezar();
+  Object.assign(profe, {
+    activo: true,
+    sesion: `S${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`,
+    inicio: Date.now(),
+    instruccion: null,
+    rep: 0,
+    intentos: [],
+    historial: [],
+    notas: [],
+  });
+  $('profe').setAttribute('aria-pressed', 'true');
+  $('panel-profe').hidden = false;
+  ajustarHoja();
+  await pedirAlProfe('Empezamos la sesión.');
+}
+
+function terminarProfe(despedida) {
+  clearTimeout(profe.temporizador);
+  if (practica) pararAlTempo();
+  profe.activo = false;
+  profe.instruccion = null;
+  $('profe').setAttribute('aria-pressed', 'false');
+  decirProfe(despedida ?? 'Sesión terminada.');
+  pintarPlanProfe();
+  ajustarHoja();
+}
+
+function pausarProfe() {
+  clearTimeout(profe.temporizador);
+  decirProfe('En pausa. Pulsa «Otra vez» para seguir o «Siguiente» para que el profe decida.');
+}
+
+/** Resumen corto de un intento para el profe. */
+function compactarIntento(u) {
+  return {
+    desde: u.desde,
+    hasta: u.hasta,
+    mano: u.mano,
+    tempo: u.total.tempo,
+    total: (({ notas, bien, falladas, omitidas, titubeos, desajusteMs, desajusteAbsMs }) => ({ notas, bien, falladas, omitidas, titubeos, desajusteMs, desajusteAbsMs }))(u.total),
+    filas: u.filas.map(({ compas, mano, notas, bien, falladas, omitidas, desajusteMs, articulacion }) => ({ compas, mano, notas, bien, falladas, omitidas, desajusteMs, articulacion })),
+    pedal: u.pedal,
+  };
+}
+
+async function pedirAlProfe(comentario = null) {
+  if (!profe.activo || profe.esperando) return;
+  clearTimeout(profe.temporizador);
+  if (practica) pararAlTempo();
+  profe.esperando = true;
+  decirProfe('El profe está pensando…', { pensando: true });
+  for (const b of document.querySelectorAll('.profe-botones button')) b.disabled = true;
+  const comentarios = [...profe.notas, comentario].filter(Boolean);
+  const peticion = {
+    sesion: profe.sesion,
+    modelo: ajustes.modeloProfe,
+    pieza: {
+      titulo: piezaActual.titulo,
+      compositor: piezaActual.compositor,
+      compases: partitura.numCompases,
+      compas: piezaActual.compas,
+      tempoObjetivo: piezaActual.tempoObjetivo,
+    },
+    ahora: { desde: partitura.desde, hasta: partitura.hasta, mano: ajustes.mano, tempo: metronomo.ppm },
+    intentos: profe.intentos,
+    historial: profe.historial,
+    comentario: comentarios.length ? comentarios.join(' · ') : null,
+    minutos: Math.round((Date.now() - profe.inicio) / 60000),
+  };
+  try {
+    const r = await servidor.profe(peticion);
+    gasto.registrar(r.modelo, r.uso);
+    if (profe.intentos.length || comentarios.length) {
+      profe.historial.push({
+        desde: peticion.ahora.desde,
+        hasta: peticion.ahora.hasta,
+        mano: peticion.ahora.mano,
+        tempo: peticion.ahora.tempo,
+        resultados: profe.intentos.map((it) => `${it.total.bien}/${it.total.notas}`),
+        comentario: peticion.comentario,
+        decision: r.instruccion.decir,
+      });
+    }
+    profe.intentos = [];
+    profe.notas = [];
+    if (profe.activo) aplicarInstruccion(r.instruccion);
+  } catch (err) {
+    console.warn(err);
+    decirProfe(`No he podido hablar con el profe: ${err.message} Pulsa «Siguiente» para reintentar.`);
+  } finally {
+    profe.esperando = false;
+    for (const b of document.querySelectorAll('.profe-botones button')) b.disabled = false;
+  }
+}
+
+function aplicarInstruccion(i) {
+  profe.instruccion = i;
+  profe.rep = 0;
+  decirProfe(i.decir);
+  pintarPlanProfe();
+  if (i.accion === 'terminar') {
+    terminarProfe(i.decir);
+    return;
+  }
+  if (i.accion === 'descansar') {
+    $('profe-siguiente').textContent = '→ Seguir';
+    return;
+  }
+  $('profe-siguiente').textContent = '→ Siguiente';
+  ajustes.mano = i.mano;
+  $('mano').value = i.mano;
+  cambiarTempo(i.tempo);
+  if (i.desde !== partitura.desde || i.hasta !== partitura.hasta) verFragmento(i.desde, i.hasta);
+  else guardar();
+  empezarRepeticion(2500);
+}
+
+/** Arranca la siguiente vez al tempo tras un momento (para leer la indicación y poner las manos). */
+function empezarRepeticion(espera) {
+  clearTimeout(profe.temporizador);
+  pintarPlanProfe();
+  profe.temporizador = setTimeout(() => {
+    if (profe.activo && !practica && !profe.esperando) empezarAlTempo();
+  }, espera);
+}
+
+function repeticionTerminada(intento) {
+  profe.intentos.push(compactarIntento(intento));
+  profe.rep++;
+  if (profe.rep < profe.instruccion.repeticiones) empezarRepeticion(1500);
+  else pedirAlProfe();
+}
+
+// Órdenes rápidas: las de tempo y «otra vez» las hace la app sola (sin gastar); se le cuentan al profe después.
+function orden(cual) {
+  if (!profe.activo) return;
+  const i = profe.instruccion;
+  if (cual === 'para') {
+    terminarProfe('Sesión terminada. ¡Buen trabajo!');
+    return;
+  }
+  if (cual === 'siguiente' || !i || ['descansar', 'terminar'].includes(i.accion)) {
+    pedirAlProfe(cual === 'siguiente' ? 'Quiero pasar al siguiente paso.' : null);
+    return;
+  }
+  if (practica) pararAlTempo();
+  if (cual === 'mas-lento' || cual === 'mas-rapido') {
+    const nuevo = Math.max(20, Math.min(240, i.tempo + (cual === 'mas-lento' ? -8 : 8)));
+    profe.notas.push(`Ha pedido ir ${cual === 'mas-lento' ? 'más lento' : 'más rápido'} (${i.tempo} → ${nuevo} ppm).`);
+    i.tempo = nuevo;
+    cambiarTempo(nuevo);
+  } else {
+    profe.notas.push('Ha pedido repetir otra vez.');
+  }
+  profe.rep = 0;
+  empezarRepeticion(1500);
+}
+
+for (const b of document.querySelectorAll('[data-orden]')) b.addEventListener('click', () => orden(b.dataset.orden));
+$('profe-comentario').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const texto = $('profe-texto').value.trim();
+  if (!texto || !profe.activo) return;
+  $('profe-texto').value = '';
+  pedirAlProfe(texto);
+});
+$('profe').addEventListener('click', () => {
+  if (profe.activo) terminarProfe('Sesión terminada. ¡Buen trabajo!');
+  else empezarProfe();
 });
 
 const conSigno = (ms) => (ms == null ? '–' : `${ms > 0 ? '+' : ''}${ms} ms`);

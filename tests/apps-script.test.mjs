@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 
-const codigo = readFileSync(new URL('../apps-script/Codigo.gs', import.meta.url), 'utf8');
+// Apps Script junta todos los .gs en el mismo ámbito: aquí igual
+const codigo = ['Codigo.gs', 'Profe.gs'].map((f) => readFileSync(new URL(`../apps-script/${f}`, import.meta.url), 'utf8')).join('\n');
 
 class Blob {
   constructor(nombre, bytes) {
@@ -70,8 +71,15 @@ const XML = (titulo = 'Invención n.º 13', compositor = 'Johann Sebastian Bach'
   `</part></score-partwise>`;
 
 // Google simulado: una carpeta de Drive con ficheros y un Sheet con la pestaña «Piezas».
-function entorno({ token = 'secreto', ficheros = {} } = {}) {
+function entorno({ token = 'secreto', ficheros = {}, clave = 'sk-ant-prueba', api = null } = {}) {
   const propiedades = new Map(token ? [['TOKEN', token]] : []);
+  if (clave) propiedades.set('ANTHROPIC_API_KEY', clave);
+  const peticionesApi = [];
+  const otrasHojas = new Map(); // Gasto, Intentos…
+  const hojaSimple = () => {
+    const filas = [];
+    return { filas, appendRow: (f) => filas.push(f), getRange: () => ({ setValues: (v) => { filas.unshift(...v); return { setFontWeight() {} }; } }), setFrozenRows() {} };
+  };
   const registro = [];
   let siguienteId = 1;
   const drive = new Map(); // id → {nombre, bytes}
@@ -108,7 +116,25 @@ function entorno({ token = 'secreto', ficheros = {} } = {}) {
   const ctx = {
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => propiedades.get(k) ?? null, setProperty: (k, v) => propiedades.set(k, v) }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getName: () => 'pianobot', getSheetByName: (n) => (n === 'Piezas' ? hoja : null), insertSheet: () => hoja }) },
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ({
+        getName: () => 'pianobot',
+        getSheetByName: (n) => (n === 'Piezas' ? hoja : otrasHojas.get(n) ?? null),
+        insertSheet: (n) => {
+          if (n === 'Piezas') return hoja;
+          otrasHojas.set(n, hojaSimple());
+          return otrasHojas.get(n);
+        },
+      }),
+    },
+    UrlFetchApp: {
+      getRequest: () => ({}),
+      fetch: (url, opciones) => {
+        peticionesApi.push({ url, opciones, cuerpo: JSON.parse(opciones.payload) });
+        const r = api ? api(JSON.parse(opciones.payload)) : { codigo: 500, cuerpo: {} };
+        return { getResponseCode: () => r.codigo, getContentText: () => (typeof r.cuerpo === 'string' ? r.cuerpo : JSON.stringify(r.cuerpo)) };
+      },
+    },
     DriveApp: {
       getFileById: (id) => fichero(id),
       getFolderById: () => ({
@@ -132,7 +158,7 @@ function entorno({ token = 'secreto', ficheros = {} } = {}) {
   vm.runInContext(codigo, ctx);
   const llamar = (parametros) => JSON.parse(ctx.doGet({ parameter: parametros }).texto);
   const enviar = (cuerpo) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(cuerpo) } }).texto);
-  return { ctx, llamar, enviar, propiedades, registro, filas: () => filas, drive, papelera };
+  return { ctx, llamar, enviar, propiedades, registro, filas: () => filas, drive, papelera, peticionesApi, otrasHojas };
 }
 
 test('sin token o con uno incorrecto no da nada', () => {
@@ -152,7 +178,7 @@ test('configurar crea un token, lo apunta en el registro y no lo cambia si ya ex
   const t = ctx.configurar();
   assert.equal(t.length, 64);
   assert.equal(propiedades.get('TOKEN'), t);
-  assert.ok(registro[0].includes(t));
+  assert.ok(registro.some((linea) => linea.includes(t)));
   assert.equal(ctx.configurar(), t);
 });
 
@@ -265,4 +291,106 @@ test('ficheros convertidos de Capella: el título y el autor se sacan de los tex
   const [pieza] = llamar({ accion: 'piezas', token: 'secreto' }).piezas;
   assert.equal(pieza.titulo, 'Präludium und Fughetta in G-Dur');
   assert.equal(pieza.compositor, 'Johann Sebastian Bach');
+});
+
+// ---------- El profe ----------
+
+const PETICION = {
+  sesion: 'S20261102-1700',
+  pieza: { titulo: 'Invención n.º 13', compositor: 'J. S. Bach', compases: 25, compas: '4/4', tempoObjetivo: 80 },
+  ahora: { desde: 9, hasta: 12, mano: 'ambas', tempo: 60 },
+  intentos: [
+    { desde: 9, hasta: 12, mano: 'ambas', tempo: 60, total: { notas: 97, bien: 92, falladas: 3, omitidas: 2, titubeos: 1, desajusteMs: -12 },
+      filas: [{ compas: 11, mano: 'derecha', falladas: 3, articulacion: 80 }, { compas: 12, mano: 'izquierda', falladas: 0, articulacion: 90 }],
+      pedal: [{ compas: 11, pisadoPct: 0 }] },
+  ],
+  historial: [],
+  comentario: 'estoy un poco cansado',
+};
+const respuestaApi = (instruccion, extra = {}) => ({
+  codigo: 200,
+  cuerpo: {
+    model: 'claude-haiku-5-5', stop_reason: 'end_turn',
+    content: [{ type: 'thinking', thinking: '', signature: 'x' }, { type: 'text', text: JSON.stringify(instruccion) }],
+    usage: { input_tokens: 3000, output_tokens: 120, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    ...extra,
+  },
+});
+const BUENA = { decir: 'El 11 se te atasca en el salto. Solo el 11, mano derecha.', accion: 'cambiar', desde: 11, hasta: 11, mano: 'derecha', tempo: 52, repeticiones: 4 };
+
+test('profe: llama a Claude bien (modelo, cabeceras, JSON estructurado) y devuelve la instrucción', () => {
+  const { enviar, peticionesApi } = entorno({ api: () => respuestaApi(BUENA) });
+  const r = enviar({ accion: 'profe', token: 'secreto', peticion: PETICION });
+  assert.deepEqual(r.instruccion, BUENA);
+  assert.equal(r.modelo, 'claude-haiku-5-5');
+  assert.ok(Math.abs(r.coste - (3000 * 0.1 + 120 * 0.5) / 1e6) < 1e-12);
+  const { url, opciones, cuerpo } = peticionesApi[0];
+  assert.equal(url, 'https://api.anthropic.com/v1/messages');
+  assert.equal(opciones.headers['x-api-key'], 'sk-ant-prueba');
+  assert.equal(opciones.headers['anthropic-version'], '2026-10-21');
+  assert.equal(cuerpo.model, 'claude-haiku-5-5');
+  assert.equal(cuerpo.output_config.effort, 'low');
+  assert.equal(cuerpo.output_config.format.type, 'json_schema');
+  assert.equal(cuerpo.output_config.format.schema.additionalProperties, false);
+  assert.ok(!('temperature' in cuerpo) && !('thinking' in cuerpo));
+  const contexto = JSON.parse(cuerpo.messages[0].content);
+  assert.equal(contexto.comentario, 'estoy un poco cansado');
+  assert.equal(contexto.intentos[0].filas[0].compas, 11);
+  assert.match(cuerpo.system, /profe de piano/);
+});
+
+test('profe: con Sonnet u Opus, se pide ese modelo (con respaldo ante rechazos) y se cobra a su precio', () => {
+  for (const [modelo, entrada, salida] of [['claude-sonnet-5-5', 2, 10], ['claude-opus-5-5', 4, 20]]) {
+    const { enviar, peticionesApi } = entorno({ api: (c) => respuestaApi(BUENA, { model: c.model }) });
+    const r = enviar({ accion: 'profe', token: 'secreto', peticion: { ...PETICION, modelo } });
+    const { opciones, cuerpo } = peticionesApi[0];
+    assert.equal(cuerpo.model, modelo);
+    assert.equal(cuerpo.fallbacks, 'default');
+    assert.equal(opciones.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
+    assert.equal(r.modelo, modelo);
+    assert.ok(Math.abs(r.coste - (3000 * entrada + 120 * salida) / 1e6) < 1e-12);
+  }
+  // Haiku no lleva respaldo; un modelo desconocido se queda en Haiku
+  const { enviar, peticionesApi } = entorno({ api: () => respuestaApi(BUENA) });
+  enviar({ accion: 'profe', token: 'secreto', peticion: { ...PETICION, modelo: 'claude-inventado' } });
+  assert.equal(peticionesApi[0].cuerpo.model, 'claude-haiku-5-5');
+  assert.ok(!('fallbacks' in peticionesApi[0].cuerpo) && !peticionesApi[0].opciones.headers['anthropic-beta']);
+});
+
+test('profe: apunta el gasto y los intentos en el Sheet', () => {
+  const { enviar, otrasHojas } = entorno({ api: () => respuestaApi(BUENA) });
+  enviar({ accion: 'profe', token: 'secreto', peticion: PETICION });
+  const copia = (x) => JSON.parse(JSON.stringify(x)); // (las listas del entorno simulado son de otro «mundo»)
+  const gasto = copia(otrasHojas.get('Gasto').filas);
+  assert.equal(gasto[0][0], 'Fecha');
+  assert.deepEqual(gasto[1].slice(1, 5), ['S20261102-1700', 'claude-haiku-5-5', 3000, 120]);
+  const intentos = copia(otrasHojas.get('Intentos').filas);
+  assert.deepEqual(intentos[1].slice(2, 9), ["'9-12", 'ambas', 60, 3, 2, 1, -12]);
+  assert.equal(intentos[1][9], 85);
+  assert.equal(intentos[1][11], BUENA.decir);
+});
+
+test('profe: una respuesta fuera de rango se deja en algo que la app puede hacer', () => {
+  const loca = { decir: '  Venga.  ', accion: 'bailar', desde: 40, hasta: 3, mano: 'pie', tempo: 999, repeticiones: 50 };
+  const { enviar } = entorno({ api: () => respuestaApi(loca) });
+  const { instruccion } = enviar({ accion: 'profe', token: 'secreto', peticion: PETICION });
+  assert.deepEqual(instruccion, { decir: 'Venga.', accion: 'repetir', desde: 3, hasta: 25, mano: 'ambas', tempo: 240, repeticiones: 6 });
+});
+
+test('profe: errores claros (sin clave, clave mala, sin saldo, saturada, rechazo) y sin gasto apuntado', () => {
+  assert.match(entorno({ clave: null }).enviar({ accion: 'profe', token: 'secreto', peticion: PETICION }).error, /Falta la clave/);
+  const casos = [
+    [{ codigo: 401, cuerpo: { error: { message: 'invalid x-api-key' } } }, /no es válida/],
+    [{ codigo: 400, cuerpo: { error: { message: 'Your credit balance is too low' } } }, /saldo/],
+    [{ codigo: 529, cuerpo: { error: { message: 'Overloaded' } } }, /saturada/],
+    [{ codigo: 429, cuerpo: { error: { message: 'rate' } } }, /espera/],
+    [respuestaApi({}, { stop_reason: 'refusal', content: [] }), /no ha querido/],
+    [{ codigo: 200, cuerpo: '<html>' }, /inesperado/],
+  ];
+  for (const [respuesta, error] of casos) {
+    const { enviar, otrasHojas } = entorno({ api: () => respuesta });
+    assert.match(enviar({ accion: 'profe', token: 'secreto', peticion: PETICION }).error, error);
+    assert.equal(otrasHojas.get('Gasto'), undefined);
+  }
+  assert.equal(entorno({ api: () => respuestaApi(BUENA) }).enviar({ accion: 'profe', token: 'otro', peticion: PETICION }).error, 'Token incorrecto.');
 });
